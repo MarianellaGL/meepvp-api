@@ -26,6 +26,7 @@ type ScoreField struct {
 
 type ScoringRule struct {
 	ID           string       `json:"id"`
+	BGGID        int          `json:"bggId,omitempty"`
 	GameName     string       `json:"gameName"`
 	Name         string       `json:"name"`
 	WinCondition WinCondition `json:"winCondition"`
@@ -52,6 +53,7 @@ type ScoreSession struct {
 	RuleID       string                    `json:"ruleId"`
 	Players      []Player                  `json:"players"`
 	Values       map[string]map[string]int `json:"values"`
+	ManualPoints map[string]int            `json:"manualPoints,omitempty"`
 	Status       string                    `json:"status"`
 	CreatedAt    time.Time                 `json:"createdAt"`
 	LastModified time.Time                 `json:"lastModified"`
@@ -63,4 +65,15 @@ type PDFImport struct {
 	Status    string    `json:"status"`
 	FileName  string    `json:"fileName"`
 	CreatedAt time.Time `json:"createdAt"`
+}
+
+type ScheduledGame struct {
+	ID          string    `json:"id"`
+	TableCode   string    `json:"tableCode"`
+	GameName    string    `json:"gameName"`
+	RuleID      string    `json:"ruleId,omitempty"`
+	ScheduledAt time.Time `json:"scheduledAt"`
+	Players     []string  `json:"players"`
+	SessionID   string    `json:"sessionId,omitempty"`
+	CreatedAt   time.Time `json:"createdAt"`
 }

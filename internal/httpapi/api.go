@@ -1,14 +1,18 @@
 package httpapi
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"path"
+	"strconv"
 	"strings"
 
 	"tablescore-api/internal/bgg"
 	"tablescore-api/internal/domain"
+	"tablescore-api/internal/pdfreader"
 	"tablescore-api/internal/store"
 )
 
@@ -39,7 +43,7 @@ func (a *API) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Table-Token")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, OPTIONS")
+		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return
@@ -57,25 +61,70 @@ func (a *API) route(w http.ResponseWriter, r *http.Request) {
 		a.createTable(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/bgg/collections/"):
 		a.getBGGCollection(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/bgg/games/") && strings.HasSuffix(p, "/rules"):
+		a.getBGGRules(w, r)
+	case r.Method == http.MethodPost && p == "/v1/pdf/extract":
+		a.extractPDF(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/tables/") && strings.HasSuffix(p, "/sessions"):
 		a.createSession(w, r)
+	case (r.Method == http.MethodPost || r.Method == http.MethodGet) && strings.HasPrefix(p, "/v1/tables/") && strings.HasSuffix(p, "/scheduled-games"):
+		a.scheduledGames(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(p, "/v1/scheduled-games/") && strings.HasSuffix(p, "/rule"):
+		a.setScheduledGameRule(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(p, "/v1/scheduled-games/") && strings.HasSuffix(p, "/session"):
+		a.setScheduledGameSession(w, r)
 	case r.Method == http.MethodPost && p == "/v1/scoring-rules":
 		a.createRule(w, r)
 	case r.Method == http.MethodGet && p == "/v1/scoring-rules":
 		a.listRules(w)
+	case r.Method == http.MethodGet && p == "/v1/community/scoring-rules":
+		a.searchPublicRules(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/scoring-rules/") && strings.HasSuffix(p, "/pdf-imports"):
 		a.createPDFImport(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/sessions/"):
 		a.getSession(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/players"):
+		a.addPlayer(w, r)
 	case r.Method == http.MethodPut && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/scores"):
 		a.updateScores(w, r)
+	case r.Method == http.MethodPatch && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/scores"):
+		a.setScore(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/points"):
+		a.adjustPoints(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/finish"):
 		a.finishSession(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/reopen"):
+		a.reopenSession(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/pdf-imports/"):
 		a.getPDFImport(w, r)
 	default:
 		writeError(w, http.StatusNotFound, "route not found")
 	}
+}
+
+func (a *API) extractPDF(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, pdfreader.MaxFileBytes+(1<<20))
+	if err := r.ParseMultipartForm(pdfreader.MaxFileBytes); err != nil {
+		writeError(w, http.StatusBadRequest, "a PDF file up to 20 MB is required")
+		return
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, pdfreader.MaxFileBytes+1))
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "could not read PDF")
+		return
+	}
+	result, err := pdfreader.Extract(data, header.Filename)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	writeJSON(w, http.StatusOK, result)
 }
 
 func (a *API) getBGGCollection(w http.ResponseWriter, r *http.Request) {
@@ -90,6 +139,29 @@ func (a *API) getBGGCollection(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusAccepted
 	}
 	writeJSON(w, status, collection)
+}
+
+func (a *API) getBGGRules(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(path.Clean(r.URL.Path), "/")
+	if len(parts) != 6 {
+		writeError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	gameID, err := strconv.Atoi(parts[4])
+	if err != nil || gameID <= 0 {
+		writeError(w, http.StatusBadRequest, "game ID must be positive")
+		return
+	}
+	result, err := a.bgg.Rules(r.Context(), gameID)
+	if err != nil {
+		writeError(w, http.StatusBadGateway, err.Error())
+		return
+	}
+	status := http.StatusOK
+	if result.Status == "processing" {
+		status = http.StatusAccepted
+	}
+	writeJSON(w, status, result)
 }
 
 func (a *API) createTable(w http.ResponseWriter, r *http.Request) {
@@ -109,6 +181,29 @@ func (a *API) createTable(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) listRules(w http.ResponseWriter) {
 	rules, err := a.store.ListRules()
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, rules)
+}
+
+func (a *API) searchPublicRules(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("query"))
+	if len([]rune(query)) > 100 {
+		writeError(w, http.StatusBadRequest, "search query is too long")
+		return
+	}
+	bggID := 0
+	if raw := r.URL.Query().Get("bggId"); raw != "" {
+		var err error
+		bggID, err = strconv.Atoi(raw)
+		if err != nil || bggID <= 0 {
+			writeError(w, http.StatusBadRequest, "bggId must be positive")
+			return
+		}
+	}
+	rules, err := a.store.SearchPublicRules(query, bggID)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -150,9 +245,93 @@ func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 	a.writeSession(w, http.StatusCreated, session)
 }
 
+func (a *API) scheduledGames(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(path.Clean(r.URL.Path), "/")
+	if len(parts) != 5 {
+		writeError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	code, token := parts[3], r.Header.Get("X-Table-Token")
+	if r.Method == http.MethodGet {
+		games, err := a.store.ListScheduledGames(code, token)
+		if err != nil {
+			writeStoreError(w, err)
+			return
+		}
+		writeJSON(w, http.StatusOK, games)
+		return
+	}
+	var input domain.ScheduledGame
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	game, err := a.store.CreateScheduledGame(code, token, input)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusCreated, game)
+}
+
+func (a *API) setScheduledGameRule(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(path.Clean(r.URL.Path), "/")
+	if len(parts) != 5 {
+		writeError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	var input struct {
+		RuleID string `json:"ruleId"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	game, err := a.store.SetScheduledGameRule(parts[3], r.Header.Get("X-Table-Token"), input.RuleID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, game)
+}
+
+func (a *API) setScheduledGameSession(w http.ResponseWriter, r *http.Request) {
+	parts := strings.Split(path.Clean(r.URL.Path), "/")
+	if len(parts) != 5 {
+		writeError(w, http.StatusNotFound, "route not found")
+		return
+	}
+	var input struct {
+		SessionID string `json:"sessionId"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	game, err := a.store.SetScheduledGameSession(parts[3], r.Header.Get("X-Table-Token"), input.SessionID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, game)
+}
+
 func (a *API) getSession(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/")
 	session, err := a.store.GetSession(id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	a.writeSession(w, http.StatusOK, session)
+}
+
+func (a *API) addPlayer(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/players")
+	var input struct {
+		Name string `json:"name"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	session, err := a.store.AddPlayer(id, input.Name)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -176,9 +355,68 @@ func (a *API) updateScores(w http.ResponseWriter, r *http.Request) {
 	a.writeSession(w, http.StatusOK, session)
 }
 
+func (a *API) setScore(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/scores")
+	var input struct {
+		PlayerID string `json:"playerId"`
+		FieldID  string `json:"fieldId"`
+		Value    int    `json:"value"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	session, err := a.store.SetScore(id, input.PlayerID, input.FieldID, input.Value)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	a.writeSession(w, http.StatusOK, session)
+}
+
+func (a *API) adjustPoints(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/points")
+	var input struct {
+		PlayerID string `json:"playerId"`
+		Delta    int    `json:"delta"`
+	}
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	session, err := a.store.AdjustPoints(id, input.PlayerID, input.Delta)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	a.writeSession(w, http.StatusOK, session)
+}
+
 func (a *API) finishSession(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/finish")
 	session, err := a.store.FinishSession(id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	a.writeSession(w, http.StatusOK, session)
+}
+
+func (a *API) reopenSession(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/reopen")
+	session, err := a.store.GetSession(id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	table, err := a.store.GetTable(session.TableCode)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(table.HostToken), []byte(r.Header.Get("X-Table-Token"))) != 1 {
+		writeError(w, http.StatusForbidden, "host token required")
+		return
+	}
+	session, err = a.store.ReopenSession(id)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -262,7 +500,7 @@ func (a *API) writeSession(w http.ResponseWriter, status int, session domain.Sco
 	}
 	totals := make([]playerTotal, 0, len(session.Players))
 	for _, player := range session.Players {
-		total := 0
+		total := session.ManualPoints[player.ID]
 		for fieldID, value := range session.Values[player.ID] {
 			field := fields[fieldID]
 			if field.Kind == domain.FieldKindManual {

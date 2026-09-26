@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -17,6 +18,8 @@ type Client struct {
 	baseURL    string
 	token      string
 	httpClient *http.Client
+	rulesMu    sync.Mutex
+	rulesCache map[int]cachedRules
 }
 
 type CollectionGame struct {
@@ -48,7 +51,7 @@ func New(baseURL, token string, httpClient *http.Client) *Client {
 	if httpClient == nil {
 		httpClient = http.DefaultClient
 	}
-	return &Client{baseURL: strings.TrimRight(baseURL, "/"), token: token, httpClient: httpClient}
+	return &Client{baseURL: strings.TrimRight(baseURL, "/"), token: token, httpClient: httpClient, rulesCache: map[int]cachedRules{}}
 }
 
 func (c *Client) Collection(ctx context.Context, username string) (CollectionResult, error) {

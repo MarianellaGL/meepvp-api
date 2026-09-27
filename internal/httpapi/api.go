@@ -74,6 +74,8 @@ func (a *API) route(w http.ResponseWriter, r *http.Request) {
 		a.claimSession(w, r)
 	case r.Method == http.MethodPost && p == "/v1/tables":
 		a.createTable(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/tables/") && strings.HasSuffix(p, "/current-session"):
+		a.currentTableSession(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/bgg/collections/"):
 		a.getBGGCollection(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/bgg/games/") && strings.HasSuffix(p, "/rules"):
@@ -192,6 +194,20 @@ func (a *API) createTable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"code": table.Code, "name": table.Name, "hostToken": table.HostToken, "createdAt": table.CreatedAt})
+}
+
+func (a *API) currentTableSession(w http.ResponseWriter, r *http.Request) {
+	code := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/tables/"), "/current-session")
+	if code == "" || strings.Contains(code, "/") {
+		writeError(w, http.StatusBadRequest, "invalid table code")
+		return
+	}
+	session, err := a.store.ActiveSessionByTable(code)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	a.writeSession(w, http.StatusOK, session)
 }
 
 func (a *API) listRules(w http.ResponseWriter) {

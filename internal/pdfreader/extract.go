@@ -3,6 +3,7 @@ package pdfreader
 import (
 	"bytes"
 	"fmt"
+	"runtime"
 	"strings"
 	"unicode"
 
@@ -41,6 +42,9 @@ func Extract(data []byte, fileName string) (result Result, err error) {
 	for pageNumber := 1; pageNumber <= pages; pageNumber++ {
 		pageText, pageErr := reader.Page(pageNumber).GetPlainText(nil)
 		if pageErr != nil {
+			if runtime.GOOS == "darwin" {
+				return extractWithPDFKit(data, fileName)
+			}
 			return Result{}, fmt.Errorf("could not read page %d: %w", pageNumber, pageErr)
 		}
 		if pageNumber > 1 {

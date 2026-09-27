@@ -3,6 +3,7 @@ package store
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"strings"
 	"time"
 
@@ -184,6 +185,19 @@ func (s *PostgresStore) GetSession(id string) (domain.ScoreSession, error) {
 		return domain.ScoreSession{}, err
 	}
 	return session, nil
+}
+
+func (s *PostgresStore) ActiveSessionByTable(code string) (domain.ScoreSession, error) {
+	var payload []byte
+	err := s.db.QueryRow(`SELECT data FROM score_sessions WHERE table_code = $1 AND data->>'status' = 'active' ORDER BY created_at DESC LIMIT 1`, strings.ToUpper(code)).Scan(&payload)
+	if errors.Is(err, sql.ErrNoRows) {
+		return domain.ScoreSession{}, ErrNotFound
+	}
+	if err != nil {
+		return domain.ScoreSession{}, err
+	}
+	var session domain.ScoreSession
+	return session, json.Unmarshal(payload, &session)
 }
 
 func (s *PostgresStore) AddPlayer(sessionID, name string) (domain.ScoreSession, error) {

@@ -3,6 +3,8 @@ package pdfreader
 import (
 	"bytes"
 	"fmt"
+	"os"
+	"runtime"
 	"strings"
 	"testing"
 )
@@ -21,6 +23,38 @@ func TestRejectsNonPDF(t *testing.T) {
 	if _, err := Extract([]byte("not a PDF"), "rules.pdf"); err == nil {
 		t.Fatal("expected a non-PDF error")
 	}
+}
+
+func TestPDFKitFallback(t *testing.T) {
+	if runtime.GOOS != "darwin" {
+		t.Skip("PDFKit is available on macOS only")
+	}
+	result, err := extractWithPDFKit(testPDF("Scoring: 5 points for each bird"), "rules.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Pages != 1 || !strings.Contains(result.Text, "5 points") || len(result.Excerpts) != 1 {
+		t.Fatalf("unexpected PDFKit result: %#v", result)
+	}
+}
+
+func TestExtractProvidedPDF(t *testing.T) {
+	fileName := os.Getenv("TABLESCORE_TEST_PDF")
+	if fileName == "" {
+		t.Skip("set TABLESCORE_TEST_PDF to check a real rulebook")
+	}
+	data, err := os.ReadFile(fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := Extract(data, fileName)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if result.Pages < 1 || result.Text == "" {
+		t.Fatalf("real PDF had no text: %#v", result)
+	}
+	t.Logf("pages=%d text_runes=%d scoring_excerpts=%d", result.Pages, len([]rune(result.Text)), len(result.Excerpts))
 }
 
 func testPDF(line string) []byte {

@@ -171,6 +171,21 @@ func (s *MemoryStore) GetSession(id string) (domain.ScoreSession, error) {
 	return session, nil
 }
 
+func (s *MemoryStore) ActiveSessionByTable(code string) (domain.ScoreSession, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var latest domain.ScoreSession
+	for _, session := range s.sessions {
+		if session.TableCode == strings.ToUpper(code) && session.Status == "active" && (latest.ID == "" || session.CreatedAt.After(latest.CreatedAt)) {
+			latest = session
+		}
+	}
+	if latest.ID == "" {
+		return domain.ScoreSession{}, ErrNotFound
+	}
+	return latest, nil
+}
+
 func (s *MemoryStore) AddPlayer(sessionID, name string) (domain.ScoreSession, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -19,6 +19,7 @@ type Repository interface {
 	GetRule(id string) (domain.ScoringRule, error)
 	CreateSession(tableCode, hostToken, ruleID string, players []domain.Player) (domain.ScoreSession, error)
 	GetSession(id string) (domain.ScoreSession, error)
+	ActiveSessionByTable(code string) (domain.ScoreSession, error)
 	AddPlayer(sessionID, name string) (domain.ScoreSession, error)
 	UpdateScores(sessionID string, values map[string]map[string]int) (domain.ScoreSession, error)
 	SetScore(sessionID, playerID, fieldID string, value int) (domain.ScoreSession, error)

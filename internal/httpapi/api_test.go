@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -178,6 +179,32 @@ func TestFinishedSessionReportsLowestScoreTie(t *testing.T) {
 	decode(t, finished, &result)
 	if len(result.Winners) != 2 || result.Winners[0].PlayerID != sessionBody.Players[0].ID || result.Winners[1].PlayerID != sessionBody.Players[1].ID {
 		t.Fatalf("expected both players to tie on the lowest total: %#v", result.Winners)
+	}
+}
+
+func TestJoinTableCodeFindsActiveSession(t *testing.T) {
+	h := httpapi.New(store.NewMemoryStore()).Handler()
+	table := request(t, h, http.MethodPost, "/v1/tables", map[string]string{"name": "Friday"}, "")
+	var owner struct{ Code, HostToken string }
+	decode(t, table, &owner)
+	rule := request(t, h, http.MethodPost, "/v1/scoring-rules", map[string]any{"gameName": "Azul", "name": "Points", "fields": []map[string]any{{"name": "Tiles", "kind": "counter", "pointsPerUnit": 1}}}, "")
+	var sheet struct{ ID string }
+	decode(t, rule, &sheet)
+	if found := request(t, h, http.MethodGet, "/v1/tables/"+owner.Code+"/current-session", nil, ""); found.Code != http.StatusNotFound {
+		t.Fatalf("table without an active game: %d", found.Code)
+	}
+	game := request(t, h, http.MethodPost, "/v1/tables/"+owner.Code+"/sessions", map[string]any{"ruleId": sheet.ID, "players": []map[string]string{{"name": "Ana"}}}, owner.HostToken)
+	var started struct{ ID string }
+	decode(t, game, &started)
+	found := request(t, h, http.MethodGet, "/v1/tables/"+strings.ToLower(owner.Code)+"/current-session", nil, "")
+	var active struct{ ID, Status string }
+	decode(t, found, &active)
+	if found.Code != http.StatusOK || active.ID != started.ID || active.Status != "active" {
+		t.Fatalf("QR table code did not resolve to the active game: %d %#v", found.Code, active)
+	}
+	request(t, h, http.MethodPost, "/v1/sessions/"+started.ID+"/finish", nil, owner.HostToken)
+	if finished := request(t, h, http.MethodGet, "/v1/tables/"+owner.Code+"/current-session", nil, ""); finished.Code != http.StatusNotFound {
+		t.Fatalf("finished game remained joinable: %d", finished.Code)
 	}
 }
 

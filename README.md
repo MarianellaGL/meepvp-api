@@ -40,6 +40,7 @@ Send the token as `Authorization: Bearer <token>`. A signed-in host's new sessio
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `POST` | `/v1/tables` | Create an anonymous table; returns shareable code and private `hostToken` |
+| `GET` | `/v1/tables/{code}/current-session` | Return the newest active session for a table code, or 404 when none is active; used by QR joining |
 | `POST`, `GET` | `/v1/scoring-rules` | Create or list all scoring sheets stored in the database |
 | `GET` | `/v1/community/scoring-rules?query=&bggId=` | Search sheets marked `isPublic: true` |
 | `POST` | `/v1/tables/{code}/sessions` | Start a game with `X-Table-Token` |
@@ -81,6 +82,8 @@ To share a newly created sheet in community search, send `isPublic: true` with a
 | `GET` | `/v1/pdf-imports/{id}` | Read a queued import job |
 
 `POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. Image-only scanned pages need OCR and may return no text. The legacy PDF import route has no worker yet, so its jobs stay queued. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
+
+On macOS, if the Go parser cannot read a PDF content stream, extraction retries with PDFKit through the `swift` command from Xcode Command Line Tools. The fallback writes the upload to a private temporary file and removes it after extraction. Other platforms still use the Go parser only.
 
 ## Current limits
 

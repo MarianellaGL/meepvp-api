@@ -121,14 +121,15 @@ func TestAnonymousTableScoringFlow(t *testing.T) {
 		t.Fatalf("finish session: got %d", finished.Code)
 	}
 	var finishedBody struct {
-		Status  string `json:"status"`
-		Winners []struct {
+		Status     string     `json:"status"`
+		FinishedAt *time.Time `json:"finishedAt"`
+		Winners    []struct {
 			PlayerID string `json:"playerId"`
 			Total    int    `json:"total"`
 		} `json:"winners"`
 	}
 	decode(t, finished, &finishedBody)
-	if finishedBody.Status != "finished" || len(finishedBody.Winners) != 1 || finishedBody.Winners[0].PlayerID != sessionBody.Players[0].ID || finishedBody.Winners[0].Total != 12 {
+	if finishedBody.Status != "finished" || finishedBody.FinishedAt == nil || finishedBody.FinishedAt.IsZero() || len(finishedBody.Winners) != 1 || finishedBody.Winners[0].PlayerID != sessionBody.Players[0].ID || finishedBody.Winners[0].Total != 12 {
 		t.Fatalf("wrong winner after finishing: %#v", finishedBody)
 	}
 	denied := request(t, h, http.MethodPost, "/v1/sessions/"+sessionBody.ID+"/reopen", nil, "wrong-token")
@@ -140,14 +141,15 @@ func TestAnonymousTableScoringFlow(t *testing.T) {
 		t.Fatalf("reopen session: got %d: %s", reopened.Code, reopened.Body.String())
 	}
 	var reopenedBody struct {
-		Status string `json:"status"`
-		Totals []struct {
+		Status     string     `json:"status"`
+		FinishedAt *time.Time `json:"finishedAt"`
+		Totals     []struct {
 			PlayerID string `json:"playerId"`
 			Total    int    `json:"total"`
 		} `json:"totals"`
 	}
 	decode(t, reopened, &reopenedBody)
-	if reopenedBody.Status != "active" || len(reopenedBody.Totals) != 2 || reopenedBody.Totals[0].Total != 12 || reopenedBody.Totals[1].Total != 8 {
+	if reopenedBody.Status != "active" || reopenedBody.FinishedAt != nil || len(reopenedBody.Totals) != 2 || reopenedBody.Totals[0].Total != 12 || reopenedBody.Totals[1].Total != 8 {
 		t.Fatalf("reopen lost saved scores: %#v", reopenedBody)
 	}
 }

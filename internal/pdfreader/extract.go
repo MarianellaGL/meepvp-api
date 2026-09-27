@@ -39,6 +39,7 @@ func Extract(data []byte, fileName string) (result Result, err error) {
 		return Result{}, fmt.Errorf("PDF must have 1 to %d pages", maxPages)
 	}
 	var text strings.Builder
+	needsOCR := false
 	for pageNumber := 1; pageNumber <= pages; pageNumber++ {
 		pageText, pageErr := reader.Page(pageNumber).GetPlainText(nil)
 		if pageErr != nil {
@@ -50,10 +51,16 @@ func Extract(data []byte, fileName string) (result Result, err error) {
 		if pageNumber > 1 {
 			text.WriteString("\n\n")
 		}
+		if strings.TrimSpace(pageText) == "" {
+			needsOCR = true
+		}
 		text.WriteString(pageText)
 		if len([]rune(text.String())) > maxTextRunes {
 			return Result{}, fmt.Errorf("PDF text is too long")
 		}
+	}
+	if needsOCR && runtime.GOOS == "darwin" {
+		return extractWithPDFKit(data, fileName)
 	}
 	plainText := strings.TrimSpace(text.String())
 	return Result{FileName: fileName, Pages: pages, Text: plainText, Excerpts: scoringExcerpts(plainText)}, nil

@@ -28,6 +28,7 @@ func (s *ScoreSession) Pause(now time.Time) {
 func (s *ScoreSession) Resume(now time.Time) {
 	s.RunningSince = &now
 	s.PausedAt = nil
+	s.FinishedAt = nil
 	s.Status = "active"
 	s.LastModified = now
 }
@@ -37,5 +38,6 @@ func (s *ScoreSession) Finish(now time.Time) {
 	s.RunningSince = nil
 	s.PausedAt = nil
 	s.Status = "finished"
+	s.FinishedAt = &now
 	s.LastModified = now
 }

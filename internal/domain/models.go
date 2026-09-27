@@ -61,6 +61,7 @@ type ScoreSession struct {
 	BoardPhotoUpdatedAt *time.Time                `json:"boardPhotoUpdatedAt,omitempty"`
 	CreatedAt           time.Time                 `json:"createdAt"`
 	LastModified        time.Time                 `json:"lastModified"`
+	FinishedAt          *time.Time                `json:"finishedAt,omitempty"`
 }
 
 type PDFImport struct {

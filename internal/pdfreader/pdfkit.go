@@ -11,17 +11,45 @@ import (
 	"time"
 )
 
-// PDFKit tolerates some valid, selectable-text PDFs whose content streams the
-// Go parser cannot read. This fallback is used only on macOS after a parse error.
+// PDFKit tolerates some PDFs the Go parser cannot read. Vision recognizes text
+// on pages without selectable text. This fallback runs only on macOS.
 const pdfKitScript = `
 import Foundation
 import PDFKit
+import Vision
+import AppKit
 
 guard let path = CommandLine.arguments.last,
       let document = PDFDocument(url: URL(fileURLWithPath: path)) else {
     exit(1)
 }
-let pages = (0..<document.pageCount).map { document.page(at: $0)?.string ?? "" }
+let pages = (0..<document.pageCount).map { index -> String in
+    guard let page = document.page(at: index) else { return "" }
+    let selectableText = page.string ?? ""
+    if !selectableText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        return selectableText
+    }
+
+    let bounds = page.bounds(for: .mediaBox)
+    guard bounds.width > 0, bounds.height > 0 else { return "" }
+    let width = min(bounds.width * 3, 2400)
+    let image = page.thumbnail(of: NSSize(width: width, height: width * bounds.height / bounds.width), for: .mediaBox)
+    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+        fputs("could not render PDF page for OCR\n", stderr)
+        exit(1)
+    }
+    let request = VNRecognizeTextRequest()
+    request.recognitionLevel = .accurate
+    request.usesLanguageCorrection = true
+    request.recognitionLanguages = ["es-ES", "en-US"]
+    do {
+        try VNImageRequestHandler(cgImage: cgImage).perform([request])
+    } catch {
+        fputs("could not recognize PDF page text: \(error)\n", stderr)
+        exit(1)
+    }
+    return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
+}
 let output = try JSONSerialization.data(withJSONObject: ["pages": document.pageCount, "texts": pages])
 FileHandle.standardOutput.write(output)
 `
@@ -40,7 +68,7 @@ func extractWithPDFKit(data []byte, fileName string) (Result, error) {
 		return Result{}, fmt.Errorf("could not prepare PDF fallback: %w", err)
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "swift", "-e", pdfKitScript, file.Name())
 	var output, stderr bytes.Buffer

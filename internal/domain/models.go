@@ -48,15 +48,19 @@ type Player struct {
 }
 
 type ScoreSession struct {
-	ID           string                    `json:"id"`
-	TableCode    string                    `json:"tableCode"`
-	RuleID       string                    `json:"ruleId"`
-	Players      []Player                  `json:"players"`
-	Values       map[string]map[string]int `json:"values"`
-	ManualPoints map[string]int            `json:"manualPoints,omitempty"`
-	Status       string                    `json:"status"`
-	CreatedAt    time.Time                 `json:"createdAt"`
-	LastModified time.Time                 `json:"lastModified"`
+	ID                  string                    `json:"id"`
+	TableCode           string                    `json:"tableCode"`
+	RuleID              string                    `json:"ruleId"`
+	Players             []Player                  `json:"players"`
+	Values              map[string]map[string]int `json:"values"`
+	ManualPoints        map[string]int            `json:"manualPoints,omitempty"`
+	Status              string                    `json:"status"`
+	PlayedSeconds       int64                     `json:"playedSeconds"`
+	RunningSince        *time.Time                `json:"runningSince,omitempty"`
+	PausedAt            *time.Time                `json:"pausedAt,omitempty"`
+	BoardPhotoUpdatedAt *time.Time                `json:"boardPhotoUpdatedAt,omitempty"`
+	CreatedAt           time.Time                 `json:"createdAt"`
+	LastModified        time.Time                 `json:"lastModified"`
 }
 
 type PDFImport struct {

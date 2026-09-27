@@ -24,6 +24,7 @@ type MemoryStore struct {
 	tables       map[string]domain.Table
 	rules        map[string]domain.ScoringRule
 	sessions     map[string]domain.ScoreSession
+	boardPhotos  map[string]memoryBoardPhoto
 	imports      map[string]domain.PDFImport
 	plans        map[string]domain.ScheduledGame
 	users        map[string]domain.User
@@ -37,10 +38,15 @@ type memoryAuthSession struct {
 	expiresAt int64
 }
 
+type memoryBoardPhoto struct {
+	data        []byte
+	contentType string
+}
+
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		tables: map[string]domain.Table{}, rules: map[string]domain.ScoringRule{},
-		sessions: map[string]domain.ScoreSession{}, imports: map[string]domain.PDFImport{}, plans: map[string]domain.ScheduledGame{},
+		sessions: map[string]domain.ScoreSession{}, boardPhotos: map[string]memoryBoardPhoto{}, imports: map[string]domain.PDFImport{}, plans: map[string]domain.ScheduledGame{},
 		users: map[string]domain.User{}, passwords: map[string]string{}, authSessions: map[string]memoryAuthSession{}, userSessions: map[string]map[string]string{},
 	}
 }
@@ -156,7 +162,7 @@ func (s *MemoryStore) CreateSession(tableCode, hostToken, ruleID string, players
 		values[players[i].ID] = map[string]int{}
 	}
 	now := time.Now().UTC()
-	session := domain.ScoreSession{ID: randomID(), TableCode: table.Code, RuleID: ruleID, Players: players, Values: values, Status: "active", CreatedAt: now, LastModified: now}
+	session := domain.ScoreSession{ID: randomID(), TableCode: table.Code, RuleID: ruleID, Players: players, Values: values, Status: "active", RunningSince: &now, CreatedAt: now, LastModified: now}
 	s.sessions[session.ID] = session
 	return session, nil
 }
@@ -176,7 +182,7 @@ func (s *MemoryStore) ActiveSessionByTable(code string) (domain.ScoreSession, er
 	defer s.mu.RUnlock()
 	var latest domain.ScoreSession
 	for _, session := range s.sessions {
-		if session.TableCode == strings.ToUpper(code) && session.Status == "active" && (latest.ID == "" || session.CreatedAt.After(latest.CreatedAt)) {
+		if session.TableCode == strings.ToUpper(code) && (session.Status == "active" || session.Status == "paused") && (latest.ID == "" || session.CreatedAt.After(latest.CreatedAt)) {
 			latest = session
 		}
 	}
@@ -314,7 +320,9 @@ func (s *MemoryStore) FinishSession(id string) (domain.ScoreSession, error) {
 	if !ok {
 		return domain.ScoreSession{}, ErrNotFound
 	}
-	session.Status, session.LastModified = "finished", time.Now().UTC()
+	if session.Status != "finished" {
+		session.Finish(time.Now().UTC())
+	}
 	s.sessions[id] = session
 	return session, nil
 }
@@ -326,9 +334,69 @@ func (s *MemoryStore) ReopenSession(id string) (domain.ScoreSession, error) {
 	if !ok {
 		return domain.ScoreSession{}, ErrNotFound
 	}
-	session.Status, session.LastModified = "active", time.Now().UTC()
+	if session.Status == "finished" {
+		session.Resume(time.Now().UTC())
+	}
 	s.sessions[id] = session
 	return session, nil
+}
+
+func (s *MemoryStore) PauseSession(id string) (domain.ScoreSession, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[id]
+	if !ok {
+		return domain.ScoreSession{}, ErrNotFound
+	}
+	if session.Status != "active" {
+		return domain.ScoreSession{}, ErrValidation
+	}
+	session.Pause(time.Now().UTC())
+	s.sessions[id] = session
+	return session, nil
+}
+
+func (s *MemoryStore) ResumeSession(id string) (domain.ScoreSession, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[id]
+	if !ok {
+		return domain.ScoreSession{}, ErrNotFound
+	}
+	if session.Status != "paused" {
+		return domain.ScoreSession{}, ErrValidation
+	}
+	session.Resume(time.Now().UTC())
+	s.sessions[id] = session
+	return session, nil
+}
+
+func (s *MemoryStore) SaveBoardPhoto(id string, data []byte, contentType string) (domain.ScoreSession, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[id]
+	if !ok {
+		return domain.ScoreSession{}, ErrNotFound
+	}
+	if session.Status == "finished" {
+		return domain.ScoreSession{}, ErrValidation
+	}
+	now := time.Now().UTC()
+	session.BoardPhotoUpdatedAt = &now
+	session.LastModified = now
+	s.boardPhotos[id] = memoryBoardPhoto{data: append([]byte(nil), data...), contentType: contentType}
+	s.sessions[id] = session
+	return session, nil
+}
+
+func (s *MemoryStore) GetBoardPhoto(id string) ([]byte, string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	photo, ok := s.boardPhotos[id]
+	if !ok {
+		return nil, "", ErrNotFound
+	}
+	return append([]byte(nil), photo.data...), photo.contentType, nil
 }
 
 func (s *MemoryStore) CreatePDFImport(ruleID, fileName string) (domain.PDFImport, error) {

@@ -9,6 +9,7 @@ import (
 	"path"
 	"strconv"
 	"strings"
+	"time"
 
 	"tablescore-api/internal/bgg"
 	"tablescore-api/internal/domain"
@@ -28,8 +29,9 @@ type playerTotal struct {
 
 type sessionResponse struct {
 	domain.ScoreSession
-	Totals  []playerTotal `json:"totals"`
-	Winners []playerTotal `json:"winners"`
+	DurationSeconds int64         `json:"durationSeconds"`
+	Totals          []playerTotal `json:"totals"`
+	Winners         []playerTotal `json:"winners"`
 }
 
 func New(s store.Repository, clients ...*bgg.Client) *API {
@@ -98,6 +100,10 @@ func (a *API) route(w http.ResponseWriter, r *http.Request) {
 		a.searchPublicRules(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/scoring-rules/") && strings.HasSuffix(p, "/pdf-imports"):
 		a.createPDFImport(w, r)
+	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/board-photo"):
+		a.getBoardPhoto(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/board-photo"):
+		a.saveBoardPhoto(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/sessions/"):
 		a.getSession(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/players"):
@@ -110,6 +116,10 @@ func (a *API) route(w http.ResponseWriter, r *http.Request) {
 		a.adjustPoints(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/finish"):
 		a.finishSession(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/pause"):
+		a.pauseSession(w, r)
+	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/resume"):
+		a.resumeSession(w, r)
 	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/reopen"):
 		a.reopenSession(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/pdf-imports/"):
@@ -438,7 +448,23 @@ func (a *API) adjustPoints(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) finishSession(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/finish")
+	a.changeHostSession(w, r, "finish", a.store.FinishSession)
+}
+
+func (a *API) reopenSession(w http.ResponseWriter, r *http.Request) {
+	a.changeHostSession(w, r, "reopen", a.store.ReopenSession)
+}
+
+func (a *API) pauseSession(w http.ResponseWriter, r *http.Request) {
+	a.changeHostSession(w, r, "pause", a.store.PauseSession)
+}
+
+func (a *API) resumeSession(w http.ResponseWriter, r *http.Request) {
+	a.changeHostSession(w, r, "resume", a.store.ResumeSession)
+}
+
+func (a *API) changeHostSession(w http.ResponseWriter, r *http.Request, action string, update func(string) (domain.ScoreSession, error)) {
+	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/"+action)
 	current, err := a.store.GetSession(id)
 	if err != nil {
 		writeStoreError(w, err)
@@ -453,7 +479,7 @@ func (a *API) finishSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "host token required")
 		return
 	}
-	session, err := a.store.FinishSession(id)
+	session, err := update(id)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -461,8 +487,10 @@ func (a *API) finishSession(w http.ResponseWriter, r *http.Request) {
 	a.writeSession(w, http.StatusOK, session)
 }
 
-func (a *API) reopenSession(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/reopen")
+const maxBoardPhotoBytes = 5 << 20
+
+func (a *API) saveBoardPhoto(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/board-photo")
 	session, err := a.store.GetSession(id)
 	if err != nil {
 		writeStoreError(w, err)
@@ -477,12 +505,50 @@ func (a *API) reopenSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusForbidden, "host token required")
 		return
 	}
-	session, err = a.store.ReopenSession(id)
+	r.Body = http.MaxBytesReader(w, r.Body, maxBoardPhotoBytes+(1<<20))
+	if err := r.ParseMultipartForm(maxBoardPhotoBytes); err != nil {
+		writeError(w, http.StatusBadRequest, "an image up to 5 MB is required")
+		return
+	}
+	if r.MultipartForm != nil {
+		defer r.MultipartForm.RemoveAll()
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer file.Close()
+	data, err := io.ReadAll(io.LimitReader(file, maxBoardPhotoBytes+1))
+	if err != nil || len(data) == 0 || len(data) > maxBoardPhotoBytes {
+		writeError(w, http.StatusBadRequest, "an image up to 5 MB is required")
+		return
+	}
+	contentType := http.DetectContentType(data)
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
+		writeError(w, http.StatusBadRequest, "JPEG, PNG or WebP image required")
+		return
+	}
+	session, err = a.store.SaveBoardPhoto(id, data, contentType)
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
 	a.writeSession(w, http.StatusOK, session)
+}
+
+func (a *API) getBoardPhoto(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/board-photo")
+	data, contentType, err := a.store.GetBoardPhoto(id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
 }
 
 func (a *API) createPDFImport(w http.ResponseWriter, r *http.Request) {
@@ -592,5 +658,5 @@ func (a *API) sessionResult(session domain.ScoreSession) (sessionResponse, error
 			}
 		}
 	}
-	return sessionResponse{ScoreSession: session, Totals: totals, Winners: winners}, nil
+	return sessionResponse{ScoreSession: session, DurationSeconds: session.DurationSeconds(time.Now().UTC()), Totals: totals, Winners: winners}, nil
 }

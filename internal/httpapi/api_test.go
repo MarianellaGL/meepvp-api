@@ -3,6 +3,9 @@ package httpapi_test
 import (
 	"bytes"
 	"encoding/json"
+	"image"
+	"image/png"
+	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -205,6 +208,88 @@ func TestJoinTableCodeFindsActiveSession(t *testing.T) {
 	request(t, h, http.MethodPost, "/v1/sessions/"+started.ID+"/finish", nil, owner.HostToken)
 	if finished := request(t, h, http.MethodGet, "/v1/tables/"+owner.Code+"/current-session", nil, ""); finished.Code != http.StatusNotFound {
 		t.Fatalf("finished game remained joinable: %d", finished.Code)
+	}
+}
+
+func TestPauseResumeAndBoardPhoto(t *testing.T) {
+	h := httpapi.New(store.NewMemoryStore()).Handler()
+	table := request(t, h, http.MethodPost, "/v1/tables", map[string]string{"name": "Long game"}, "")
+	var owner struct{ Code, HostToken string }
+	decode(t, table, &owner)
+	rule := request(t, h, http.MethodPost, "/v1/scoring-rules", map[string]any{"gameName": "Campaign", "name": "Points", "fields": []map[string]any{{"name": "Points", "kind": "counter", "pointsPerUnit": 1}}}, "")
+	var sheet struct{ ID string }
+	decode(t, rule, &sheet)
+	game := request(t, h, http.MethodPost, "/v1/tables/"+owner.Code+"/sessions", map[string]any{"ruleId": sheet.ID, "players": []map[string]string{{"name": "Ana"}}}, owner.HostToken)
+	var started struct{ ID string }
+	decode(t, game, &started)
+	path := "/v1/sessions/" + started.ID
+	if denied := request(t, h, http.MethodPost, path+"/pause", nil, ""); denied.Code != http.StatusForbidden {
+		t.Fatalf("pause without host token: %d", denied.Code)
+	}
+	paused := request(t, h, http.MethodPost, path+"/pause", nil, owner.HostToken)
+	var state struct {
+		Status          string
+		DurationSeconds int64
+		PausedAt        *time.Time
+	}
+	decode(t, paused, &state)
+	if paused.Code != http.StatusOK || state.Status != "paused" || state.PausedAt == nil {
+		t.Fatalf("pause response: %d %#v", paused.Code, state)
+	}
+	if current := request(t, h, http.MethodGet, "/v1/tables/"+owner.Code+"/current-session", nil, ""); current.Code != http.StatusOK {
+		t.Fatalf("paused game disappeared: %d", current.Code)
+	}
+	if changed := request(t, h, http.MethodPost, path+"/points", map[string]any{"playerId": "any", "delta": 1}, ""); changed.Code == http.StatusOK {
+		t.Fatal("scores changed while paused")
+	}
+
+	var imageBytes bytes.Buffer
+	if err := png.Encode(&imageBytes, image.NewRGBA(image.Rect(0, 0, 2, 2))); err != nil {
+		t.Fatal(err)
+	}
+	upload := func(token string, payload []byte) *httptest.ResponseRecorder {
+		var body bytes.Buffer
+		writer := multipart.NewWriter(&body)
+		part, err := writer.CreateFormFile("file", "board.png")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := part.Write(payload); err != nil {
+			t.Fatal(err)
+		}
+		if err := writer.Close(); err != nil {
+			t.Fatal(err)
+		}
+		r := httptest.NewRequest(http.MethodPost, path+"/board-photo", &body)
+		r.Header.Set("Content-Type", writer.FormDataContentType())
+		r.Header.Set("X-Table-Token", token)
+		response := httptest.NewRecorder()
+		h.ServeHTTP(response, r)
+		return response
+	}
+	if denied := upload("", imageBytes.Bytes()); denied.Code != http.StatusForbidden {
+		t.Fatalf("photo without host token: %d", denied.Code)
+	}
+	if invalid := upload(owner.HostToken, []byte("not an image")); invalid.Code != http.StatusBadRequest {
+		t.Fatalf("invalid image accepted: %d", invalid.Code)
+	}
+	photo := upload(owner.HostToken, imageBytes.Bytes())
+	var photoState struct{ BoardPhotoUpdatedAt *time.Time }
+	decode(t, photo, &photoState)
+	if photo.Code != http.StatusOK || photoState.BoardPhotoUpdatedAt == nil {
+		t.Fatalf("photo upload: %d", photo.Code)
+	}
+	read := request(t, h, http.MethodGet, path+"/board-photo", nil, "")
+	if read.Code != http.StatusOK || read.Header().Get("Content-Type") != "image/png" || !bytes.Equal(read.Body.Bytes(), imageBytes.Bytes()) {
+		t.Fatalf("photo read: %d %q", read.Code, read.Header().Get("Content-Type"))
+	}
+	resumed := request(t, h, http.MethodPost, path+"/resume", nil, owner.HostToken)
+	decode(t, resumed, &state)
+	if resumed.Code != http.StatusOK || state.Status != "active" {
+		t.Fatalf("resume response: %d %#v", resumed.Code, state)
+	}
+	if twice := request(t, h, http.MethodPost, path+"/resume", nil, owner.HostToken); twice.Code != http.StatusBadRequest {
+		t.Fatalf("resumed twice: %d", twice.Code)
 	}
 }
 

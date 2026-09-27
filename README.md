@@ -40,7 +40,7 @@ Send the token as `Authorization: Bearer <token>`. A signed-in host's new sessio
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `POST` | `/v1/tables` | Create an anonymous table; returns shareable code and private `hostToken` |
-| `GET` | `/v1/tables/{code}/current-session` | Return the newest active session for a table code, or 404 when none is active; used by QR joining |
+| `GET` | `/v1/tables/{code}/current-session` | Return the newest active or paused session for a table code, or 404 when there is none |
 | `POST`, `GET` | `/v1/scoring-rules` | Create or list all scoring sheets stored in the database |
 | `GET` | `/v1/community/scoring-rules?query=&bggId=` | Search sheets marked `isPublic: true` |
 | `POST` | `/v1/tables/{code}/sessions` | Start a game with `X-Table-Token` |
@@ -50,12 +50,16 @@ Send the token as `Authorization: Bearer <token>`. A signed-in host's new sessio
 | `PUT` | `/v1/sessions/{id}/scores` | Replace all score field values |
 | `POST` | `/v1/sessions/{id}/points` | Add or subtract direct points |
 | `POST` | `/v1/sessions/{id}/finish` | Finish the game with `X-Table-Token` and return `winners` |
+| `POST` | `/v1/sessions/{id}/pause`, `/resume` | Pause or resume a long game with `X-Table-Token`; paused time is excluded from `durationSeconds` |
+| `POST`, `GET` | `/v1/sessions/{id}/board-photo` | Store or read the latest board photo (JPEG, PNG or WebP, up to 5 MB); upload requires `X-Table-Token` |
 | `POST` | `/v1/sessions/{id}/reopen` | Reopen a finished game with `X-Table-Token` |
 | `POST`, `GET` | `/v1/tables/{code}/scheduled-games` | Create or list game plans with `X-Table-Token` |
 | `PATCH` | `/v1/scheduled-games/{id}/rule` | Assign a scoring sheet to a plan |
 | `PATCH` | `/v1/scheduled-games/{id}/session` | Attach a started session to a plan |
 
 To share a newly created sheet in community search, send `isPublic: true` with a valid bearer token. Creating an unlisted sheet remains available without an account. The `winners` array appears in finished-session responses and includes all players tied for the best score. The sheet's `winCondition` determines whether the highest or lowest total wins; `totals` is returned throughout the session.
+
+Sessions now return `durationSeconds`, the time actually played. Pausing stores the accumulated time and stops scoring; resuming starts the clock again, even days later. `GET /v1/tables/{code}/current-session` finds active or paused games, while finished games return 404. One board photo per session is kept in `session_board_photos`; a new upload replaces it. Anyone with the session ID can read the photo, as with the other anonymous session data.
 
 ```json
 {
@@ -81,9 +85,9 @@ To share a newly created sheet in community search, send `isPublic: true` with a
 | `POST` | `/v1/scoring-rules/{ruleID}/pdf-imports` | Create a queued legacy import job |
 | `GET` | `/v1/pdf-imports/{id}` | Read a queued import job |
 
-`POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. Image-only scanned pages need OCR and may return no text. The legacy PDF import route has no worker yet, so its jobs stay queued. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
+`POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. The legacy PDF import route has no worker yet, so its jobs stay queued. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
 
-On macOS, if the Go parser cannot read a PDF content stream, extraction retries with PDFKit through the `swift` command from Xcode Command Line Tools. The fallback writes the upload to a private temporary file and removes it after extraction. Other platforms still use the Go parser only.
+On macOS, extraction retries with PDFKit through the `swift` command from Xcode Command Line Tools when the Go parser fails or a page has no selectable text. Vision OCR reads those scanned pages. The fallback writes the upload to a private temporary file and removes it after extraction. Other platforms still use the Go parser only and return no text for image-only scans.
 
 ## Current limits
 

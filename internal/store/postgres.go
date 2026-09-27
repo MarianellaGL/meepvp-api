@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS scheduled_games (id TEXT PRIMARY KEY, table_code TEXT
 CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL, username_key TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL);
 CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL);
 CREATE TABLE IF NOT EXISTS user_game_sessions (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, session_id TEXT NOT NULL REFERENCES score_sessions(id) ON DELETE CASCADE, player_id TEXT NOT NULL, PRIMARY KEY (user_id, session_id), UNIQUE (session_id, player_id));
+CREATE TABLE IF NOT EXISTS session_board_photos (session_id TEXT PRIMARY KEY REFERENCES score_sessions(id) ON DELETE CASCADE, image_data BYTEA NOT NULL, content_type TEXT NOT NULL, uploaded_at TIMESTAMPTZ NOT NULL);
 CREATE INDEX IF NOT EXISTS score_sessions_table_code_idx ON score_sessions(table_code);
 CREATE INDEX IF NOT EXISTS scoring_rules_created_at_idx ON scoring_rules(created_at DESC);
 CREATE INDEX IF NOT EXISTS scheduled_games_table_time_idx ON scheduled_games(table_code, scheduled_at);`)
@@ -165,7 +166,7 @@ func (s *PostgresStore) CreateSession(tableCode, hostToken, ruleID string, playe
 		values[players[i].ID] = map[string]int{}
 	}
 	now := time.Now().UTC()
-	session := domain.ScoreSession{ID: randomID(), TableCode: table.Code, RuleID: ruleID, Players: players, Values: values, Status: "active", CreatedAt: now, LastModified: now}
+	session := domain.ScoreSession{ID: randomID(), TableCode: table.Code, RuleID: ruleID, Players: players, Values: values, Status: "active", RunningSince: &now, CreatedAt: now, LastModified: now}
 	payload, _ := json.Marshal(session)
 	_, err = s.db.Exec(`INSERT INTO score_sessions (id, table_code, rule_id, data, created_at) VALUES ($1, $2, $3, $4, $5)`, session.ID, session.TableCode, session.RuleID, payload, now)
 	return session, err
@@ -189,7 +190,7 @@ func (s *PostgresStore) GetSession(id string) (domain.ScoreSession, error) {
 
 func (s *PostgresStore) ActiveSessionByTable(code string) (domain.ScoreSession, error) {
 	var payload []byte
-	err := s.db.QueryRow(`SELECT data FROM score_sessions WHERE table_code = $1 AND data->>'status' = 'active' ORDER BY created_at DESC LIMIT 1`, strings.ToUpper(code)).Scan(&payload)
+	err := s.db.QueryRow(`SELECT data FROM score_sessions WHERE table_code = $1 AND data->>'status' IN ('active', 'paused') ORDER BY created_at DESC LIMIT 1`, strings.ToUpper(code)).Scan(&payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.ScoreSession{}, ErrNotFound
 	}
@@ -366,6 +367,22 @@ func (s *PostgresStore) AdjustPoints(sessionID, playerID string, delta int) (dom
 }
 
 func (s *PostgresStore) FinishSession(id string) (domain.ScoreSession, error) {
+	return s.updateSessionState(id, "finish")
+}
+
+func (s *PostgresStore) ReopenSession(id string) (domain.ScoreSession, error) {
+	return s.updateSessionState(id, "reopen")
+}
+
+func (s *PostgresStore) PauseSession(id string) (domain.ScoreSession, error) {
+	return s.updateSessionState(id, "pause")
+}
+
+func (s *PostgresStore) ResumeSession(id string) (domain.ScoreSession, error) {
+	return s.updateSessionState(id, "resume")
+}
+
+func (s *PostgresStore) updateSessionState(id, action string) (domain.ScoreSession, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return domain.ScoreSession{}, err
@@ -382,7 +399,27 @@ func (s *PostgresStore) FinishSession(id string) (domain.ScoreSession, error) {
 	if err := json.Unmarshal(payload, &session); err != nil {
 		return domain.ScoreSession{}, err
 	}
-	session.Status, session.LastModified = "finished", time.Now().UTC()
+	now := time.Now().UTC()
+	switch action {
+	case "pause":
+		if session.Status != "active" {
+			return domain.ScoreSession{}, ErrValidation
+		}
+		session.Pause(now)
+	case "resume":
+		if session.Status != "paused" {
+			return domain.ScoreSession{}, ErrValidation
+		}
+		session.Resume(now)
+	case "finish":
+		if session.Status != "finished" {
+			session.Finish(now)
+		}
+	case "reopen":
+		if session.Status == "finished" {
+			session.Resume(now)
+		}
+	}
 	payload, _ = json.Marshal(session)
 	if _, err := tx.Exec(`UPDATE score_sessions SET data = $1 WHERE id = $2`, payload, id); err != nil {
 		return domain.ScoreSession{}, err
@@ -390,7 +427,7 @@ func (s *PostgresStore) FinishSession(id string) (domain.ScoreSession, error) {
 	return session, tx.Commit()
 }
 
-func (s *PostgresStore) ReopenSession(id string) (domain.ScoreSession, error) {
+func (s *PostgresStore) SaveBoardPhoto(id string, data []byte, contentType string) (domain.ScoreSession, error) {
 	tx, err := s.db.Begin()
 	if err != nil {
 		return domain.ScoreSession{}, err
@@ -398,7 +435,7 @@ func (s *PostgresStore) ReopenSession(id string) (domain.ScoreSession, error) {
 	defer tx.Rollback()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM score_sessions WHERE id = $1 FOR UPDATE`, id).Scan(&payload); err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return domain.ScoreSession{}, ErrNotFound
 		}
 		return domain.ScoreSession{}, err
@@ -407,12 +444,30 @@ func (s *PostgresStore) ReopenSession(id string) (domain.ScoreSession, error) {
 	if err := json.Unmarshal(payload, &session); err != nil {
 		return domain.ScoreSession{}, err
 	}
-	session.Status, session.LastModified = "active", time.Now().UTC()
+	if session.Status == "finished" {
+		return domain.ScoreSession{}, ErrValidation
+	}
+	now := time.Now().UTC()
+	if _, err := tx.Exec(`INSERT INTO session_board_photos (session_id, image_data, content_type, uploaded_at) VALUES ($1,$2,$3,$4) ON CONFLICT (session_id) DO UPDATE SET image_data = EXCLUDED.image_data, content_type = EXCLUDED.content_type, uploaded_at = EXCLUDED.uploaded_at`, id, data, contentType, now); err != nil {
+		return domain.ScoreSession{}, err
+	}
+	session.BoardPhotoUpdatedAt = &now
+	session.LastModified = now
 	payload, _ = json.Marshal(session)
 	if _, err := tx.Exec(`UPDATE score_sessions SET data = $1 WHERE id = $2`, payload, id); err != nil {
 		return domain.ScoreSession{}, err
 	}
 	return session, tx.Commit()
+}
+
+func (s *PostgresStore) GetBoardPhoto(id string) ([]byte, string, error) {
+	var data []byte
+	var contentType string
+	err := s.db.QueryRow(`SELECT image_data, content_type FROM session_board_photos WHERE session_id = $1`, id).Scan(&data, &contentType)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "", ErrNotFound
+	}
+	return data, contentType, err
 }
 
 func (s *PostgresStore) CreatePDFImport(ruleID, fileName string) (domain.PDFImport, error) {

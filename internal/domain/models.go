@@ -77,3 +77,14 @@ type ScheduledGame struct {
 	SessionID   string    `json:"sessionId,omitempty"`
 	CreatedAt   time.Time `json:"createdAt"`
 }
+
+type User struct {
+	ID        string    `json:"id"`
+	Username  string    `json:"username"`
+	CreatedAt time.Time `json:"createdAt"`
+}
+
+type UserSession struct {
+	Session  ScoreSession
+	PlayerID string
+}

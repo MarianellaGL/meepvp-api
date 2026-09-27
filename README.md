@@ -1,63 +1,87 @@
-# TableScore API
+# MeepVP API
 
-TableScore API is a Go backend-for-frontend (BFF) for a React Native board-game scoring app.
-
-It supports anonymous tables, shared score sheets, reusable scoring rules, queued PDF imports, and PostgreSQL persistence.
+Go API for the MeepVP board-game scoring app. It stores scoring sheets, tables, game sessions, schedules, and user accounts in PostgreSQL. The Go module and local Docker database still use the original `tablescore` identifiers to preserve existing data and imports.
 
 ## Run locally
 
-```bash
+```sh
 docker compose up -d postgres
 cp .env.example .env
 go run ./cmd/server
 ```
 
-The server listens on `http://localhost:8080` by default. Override it with `PORT`.
+Set `DATABASE_URL` in `.env` and provide `BGG_API_TOKEN` for BoardGameGeek requests. The `.env` file is ignored by Git. The server applies additive schema migrations at startup and listens on port 8080 unless `PORT` is set.
 
-Copy `.env.example` to `.env`, configure `DATABASE_URL`, and put the BoardGameGeek token in `BGG_API_TOKEN`. The `.env` file is ignored by Git and the API never returns this value. The server runs its schema migrations on startup.
-
-```bash
+```sh
 curl http://localhost:8080/health
+go test ./...
 ```
 
-## Mobile API flow
+Point the mobile app's `EXPO_PUBLIC_API_URL` at this server. Use a LAN IP instead of `localhost` from a physical phone.
 
-1. `POST /v1/tables` creates an anonymous table and returns a shareable `code` and a private `hostToken`.
-2. `POST /v1/scoring-rules` creates a score-sheet template with counter or checkbox fields.
-3. `POST /v1/tables/{code}/sessions` creates a shared session. Send the host token in `X-Table-Token`.
-4. `PUT /v1/sessions/{sessionID}/scores` updates the values for a player. A checkbox is represented as a numeric count, so a field can be checked more than once.
-5. `POST /v1/scoring-rules/{ruleID}/pdf-imports` accepts a PDF and creates an import job. The response is queued for the future extraction and AI review worker; the raw PDF is not made public.
-6. `GET /v1/bgg/collections/{username}` reads a BGG collection and returns JSON for React Native. BGG may answer `202`; TableScore forwards it as `{ "status": "processing" }` so the client can retry.
-7. `GET /v1/bgg/games/{gameID}/rules` finds the game's Rules forum on BGG and returns its latest thread titles, counts, and links. These are community discussions; they are not an official rulebook or an inferred scoring sheet.
-8. `POST /v1/pdf/extract` accepts a multipart `file` containing a PDF (up to 20 MB and 100 pages). It returns selectable text and up to 12 passages mentioning scoring. The file is not retained by this endpoint; scanned/image-only PDFs need OCR and may return no text. Users review the passages before creating a scoring sheet.
-9. `POST /v1/sessions/{sessionID}/players` with `{ "name": "Ana" }` adds a player to an active game and returns the updated scores and totals. Repeating a name (case-insensitively) is safe and does not add a duplicate.
-10. `POST /v1/sessions/{sessionID}/points` with `{ "playerId": "...", "delta": 5 }` adds or subtracts direct points from an active player's score. Direct points are included in `totals` alongside score-sheet fields.
-11. `POST /v1/sessions/{sessionID}/reopen` reopens a finished game without clearing its scores. Send the table host token in `X-Table-Token`.
-12. `PATCH /v1/sessions/{sessionID}/scores` with `{ "playerId": "...", "fieldId": "...", "value": 3 }` updates one scoring field atomically, so another player's concurrent changes are preserved. The earlier `PUT` route remains available for whole-sheet replacements.
-13. `GET /v1/community/scoring-rules?query=wingspan&bggId=266192` searches only scoring templates with `isPublic: true`. Both filters are optional; results include fields and point values, never finished game scores.
-14. `POST /v1/tables/{code}/scheduled-games` with `{ "gameName": "Wingspan", "scheduledAt": "2026-10-10T20:00:00-03:00", "players": ["Ana"] }` plans a future game without requiring a scoring sheet. Send `X-Table-Token`. `GET` on the same path lists that table's plans with the token.
-15. `PATCH /v1/scheduled-games/{id}/rule` with `{ "ruleId": "..." }` attaches a scoring sheet later. Send `X-Table-Token`.
-16. `PATCH /v1/scheduled-games/{id}/session` with `{ "sessionId": "..." }` connects the started game to its plan. The session must belong to the same table and use the plan's scoring sheet.
+## Accounts and statistics
 
-## Example scoring rule
+Accounts are optional for playing. Sign up with a 3–30 character username containing letters, numbers, or underscores, and a password of 12–1024 bytes. Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes with 600,000 iterations; plaintext passwords are never saved. The API issues random bearer tokens, stores only their SHA-256 hashes, and expires them after 30 days. Use HTTPS outside local development.
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/auth/signup` | Create an account and receive `{user, token}` |
+| `POST` | `/v1/auth/login` | Sign in and receive `{user, token}` |
+| `POST` | `/v1/auth/logout` | Revoke the current bearer token |
+| `GET` | `/v1/me` | Return the signed-in user |
+| `GET` | `/v1/me/stats` | Return only this account's finished games, wins, ties, and total points |
+| `GET` | `/v1/me/sessions` | Return only sessions linked to this account, including scores and winners |
+| `POST` | `/v1/me/claim-session` | Attach an older anonymous session using `{sessionId, playerId, hostToken}` |
+
+Send the token as `Authorization: Bearer <token>`. A signed-in host's new session is automatically linked to the account's first player. The claim route requires the private table host token and prevents two accounts from claiming the same player in a session. Existing anonymous sessions are not assigned to an account automatically without that proof.
+
+## Game and scoring routes
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/v1/tables` | Create an anonymous table; returns shareable code and private `hostToken` |
+| `POST`, `GET` | `/v1/scoring-rules` | Create or list all scoring sheets stored in the database |
+| `GET` | `/v1/community/scoring-rules?query=&bggId=` | Search sheets marked `isPublic: true` |
+| `POST` | `/v1/tables/{code}/sessions` | Start a game with `X-Table-Token` |
+| `GET` | `/v1/sessions/{id}` | Read the current scores and totals |
+| `POST` | `/v1/sessions/{id}/players` | Add a player to an active game |
+| `PATCH` | `/v1/sessions/{id}/scores` | Change one player's scoring field atomically |
+| `PUT` | `/v1/sessions/{id}/scores` | Replace all score field values |
+| `POST` | `/v1/sessions/{id}/points` | Add or subtract direct points |
+| `POST` | `/v1/sessions/{id}/finish` | Finish the game with `X-Table-Token` and return `winners` |
+| `POST` | `/v1/sessions/{id}/reopen` | Reopen a finished game with `X-Table-Token` |
+| `POST`, `GET` | `/v1/tables/{code}/scheduled-games` | Create or list game plans with `X-Table-Token` |
+| `PATCH` | `/v1/scheduled-games/{id}/rule` | Assign a scoring sheet to a plan |
+| `PATCH` | `/v1/scheduled-games/{id}/session` | Attach a started session to a plan |
+
+To share a newly created sheet in community search, send `isPublic: true` with a valid bearer token. Creating an unlisted sheet remains available without an account. The `winners` array appears in finished-session responses and includes all players tied for the best score. The sheet's `winCondition` determines whether the highest or lowest total wins; `totals` is returned throughout the session.
 
 ```json
 {
   "gameName": "Example Game",
   "name": "Standard scoring",
   "winCondition": "highest_total",
+  "isPublic": false,
   "fields": [
-    {"name": "Completed goals", "kind": "checkbox", "pointsPerUnit": 5},
+    {"name": "Goals", "kind": "checkbox", "pointsPerUnit": 5},
     {"name": "Coins", "kind": "counter", "pointsPerUnit": 1},
     {"name": "Penalty", "kind": "checkbox", "pointsPerUnit": -3}
   ]
 }
 ```
 
-## Current boundaries
+## BoardGameGeek and rulebooks
 
-- Anonymous tables do not require a user account.
-- The QR code belongs in React Native and encodes the table code; joining by manually entered code uses the same API.
-- The older rule-specific PDF upload route only creates a private processing job; `POST /v1/pdf/extract` extracts selectable text immediately and does not retain the file.
-- Authentication, WebSocket broadcasts, BGG synchronization, and the PDF extraction worker are deliberately separate follow-up modules.
-- Mobile schedules a device-local reminder 24 hours before a game without a scoring sheet when notification permission is granted. Remote push delivery requires an installed development or production build and push credentials.
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/v1/bgg/collections/{username}` | Import a BGG collection; may return `202` while BGG processes it |
+| `GET` | `/v1/bgg/games/{gameID}/rules` | List the game's Rules forum discussions and links |
+| `POST` | `/v1/pdf/extract` | Extract selectable text and scoring passages from a multipart PDF |
+| `POST` | `/v1/scoring-rules/{ruleID}/pdf-imports` | Create a queued legacy import job |
+| `GET` | `/v1/pdf-imports/{id}` | Read a queued import job |
+
+`POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. Image-only scanned pages need OCR and may return no text. The legacy PDF import route has no worker yet, so its jobs stay queued. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
+
+## Current limits
+
+`GET /v1/scoring-rules` currently lists **all** sheets to unauthenticated callers, including sheets omitted from community search. `isPublic: false` means unlisted, not private. Do not store confidential material in scoring sheets. Authentication protects account statistics, while anonymous tables and session IDs retain their existing access model. Rate limiting, password recovery, email verification, and publication moderation are still needed before exposing account creation and community publishing broadly on the public internet.

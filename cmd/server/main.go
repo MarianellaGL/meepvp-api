@@ -34,7 +34,7 @@ func main() {
 
 	api := httpapi.New(database, bgg.NewFromEnvironment())
 	server := &http.Server{Addr: ":" + port, Handler: api.Handler()}
-	log.Printf("TableScore API listening on http://localhost:%s", port)
+	log.Printf("MeepVP API listening on http://localhost:%s", port)
 	log.Fatal(server.ListenAndServe())
 }
 

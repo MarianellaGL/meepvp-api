@@ -109,9 +109,23 @@ func TestAnonymousTableScoringFlow(t *testing.T) {
 	if fieldBody.Values[sessionBody.Players[0].ID][ruleBody.Fields[0].ID] != 12 || fieldBody.Values[joinedBody.Players[1].ID][ruleBody.Fields[0].ID] != 3 {
 		t.Fatalf("single-field update overwrote another player's score: %#v", fieldBody.Values)
 	}
-	finished := request(t, h, http.MethodPost, "/v1/sessions/"+sessionBody.ID+"/finish", nil, "")
+	if denied := request(t, h, http.MethodPost, "/v1/sessions/"+sessionBody.ID+"/finish", nil, ""); denied.Code != http.StatusForbidden {
+		t.Fatalf("finish without host token: got %d", denied.Code)
+	}
+	finished := request(t, h, http.MethodPost, "/v1/sessions/"+sessionBody.ID+"/finish", nil, tableBody.HostToken)
 	if finished.Code != http.StatusOK {
 		t.Fatalf("finish session: got %d", finished.Code)
+	}
+	var finishedBody struct {
+		Status  string `json:"status"`
+		Winners []struct {
+			PlayerID string `json:"playerId"`
+			Total    int    `json:"total"`
+		} `json:"winners"`
+	}
+	decode(t, finished, &finishedBody)
+	if finishedBody.Status != "finished" || len(finishedBody.Winners) != 1 || finishedBody.Winners[0].PlayerID != sessionBody.Players[0].ID || finishedBody.Winners[0].Total != 12 {
+		t.Fatalf("wrong winner after finishing: %#v", finishedBody)
 	}
 	denied := request(t, h, http.MethodPost, "/v1/sessions/"+sessionBody.ID+"/reopen", nil, "wrong-token")
 	if denied.Code != http.StatusForbidden {
@@ -131,6 +145,125 @@ func TestAnonymousTableScoringFlow(t *testing.T) {
 	decode(t, reopened, &reopenedBody)
 	if reopenedBody.Status != "active" || len(reopenedBody.Totals) != 2 || reopenedBody.Totals[0].Total != 12 || reopenedBody.Totals[1].Total != 8 {
 		t.Fatalf("reopen lost saved scores: %#v", reopenedBody)
+	}
+}
+
+func TestFinishedSessionReportsLowestScoreTie(t *testing.T) {
+	h := httpapi.New(store.NewMemoryStore()).Handler()
+	table := request(t, h, http.MethodPost, "/v1/tables", map[string]string{"name": "Friday table"}, "")
+	var tableBody struct {
+		Code      string `json:"code"`
+		HostToken string `json:"hostToken"`
+	}
+	decode(t, table, &tableBody)
+	rule := request(t, h, http.MethodPost, "/v1/scoring-rules", map[string]any{"gameName": "Example", "name": "Low score", "winCondition": "lowest_total", "fields": []map[string]any{{"name": "Penalty", "kind": "counter", "pointsPerUnit": 1}}}, "")
+	var ruleBody struct {
+		ID string `json:"id"`
+	}
+	decode(t, rule, &ruleBody)
+	session := request(t, h, http.MethodPost, "/v1/tables/"+tableBody.Code+"/sessions", map[string]any{"ruleId": ruleBody.ID, "players": []map[string]string{{"name": "Ana"}, {"name": "Leo"}}}, tableBody.HostToken)
+	var sessionBody struct {
+		ID      string `json:"id"`
+		Players []struct {
+			ID string `json:"id"`
+		} `json:"players"`
+	}
+	decode(t, session, &sessionBody)
+	finished := request(t, h, http.MethodPost, "/v1/sessions/"+sessionBody.ID+"/finish", nil, tableBody.HostToken)
+	var result struct {
+		Winners []struct {
+			PlayerID string `json:"playerId"`
+		} `json:"winners"`
+	}
+	decode(t, finished, &result)
+	if len(result.Winners) != 2 || result.Winners[0].PlayerID != sessionBody.Players[0].ID || result.Winners[1].PlayerID != sessionBody.Players[1].ID {
+		t.Fatalf("expected both players to tie on the lowest total: %#v", result.Winners)
+	}
+}
+
+func TestAccountStatsAreScopedToUser(t *testing.T) {
+	h := httpapi.New(store.NewMemoryStore()).Handler()
+	signup := request(t, h, http.MethodPost, "/v1/auth/signup", map[string]string{"username": "Ana", "password": "correct horse battery staple"}, "")
+	if signup.Code != http.StatusCreated {
+		t.Fatalf("signup: %d: %s", signup.Code, signup.Body.String())
+	}
+	var ana struct {
+		Token string `json:"token"`
+	}
+	decode(t, signup, &ana)
+	duplicate := request(t, h, http.MethodPost, "/v1/auth/signup", map[string]string{"username": "ana", "password": "another secure password"}, "")
+	if duplicate.Code != http.StatusConflict {
+		t.Fatalf("duplicate username: %d", duplicate.Code)
+	}
+	login := request(t, h, http.MethodPost, "/v1/auth/login", map[string]string{"username": "ana", "password": "correct horse battery staple"}, "")
+	if login.Code != http.StatusOK {
+		t.Fatalf("login: %d: %s", login.Code, login.Body.String())
+	}
+	wrongPassword := request(t, h, http.MethodPost, "/v1/auth/login", map[string]string{"username": "ana", "password": "wrong password"}, "")
+	if wrongPassword.Code != http.StatusUnauthorized {
+		t.Fatalf("wrong password accepted: %d", wrongPassword.Code)
+	}
+	table := request(t, h, http.MethodPost, "/v1/tables", map[string]string{"name": "Friday"}, "")
+	var owner struct{ Code, HostToken string }
+	decode(t, table, &owner)
+	publicRule := map[string]any{"gameName": "Example", "name": "Points", "isPublic": true, "fields": []map[string]any{{"name": "Points", "kind": "counter", "pointsPerUnit": 1}}}
+	if response := request(t, h, http.MethodPost, "/v1/scoring-rules", publicRule, ""); response.Code != http.StatusUnauthorized {
+		t.Fatalf("anonymous publishing accepted: %d", response.Code)
+	}
+	rule := requestAuth(t, h, http.MethodPost, "/v1/scoring-rules", publicRule, ana.Token)
+	var ruleBody struct {
+		ID     string `json:"id"`
+		Fields []struct {
+			ID string `json:"id"`
+		} `json:"fields"`
+	}
+	decode(t, rule, &ruleBody)
+	session := requestBoth(t, h, http.MethodPost, "/v1/tables/"+owner.Code+"/sessions", map[string]any{"ruleId": ruleBody.ID, "players": []map[string]string{{"name": "Ana"}, {"name": "Leo"}}}, ana.Token, owner.HostToken)
+	if session.Code != http.StatusCreated {
+		t.Fatalf("create session: %d: %s", session.Code, session.Body.String())
+	}
+	var game struct {
+		ID      string `json:"id"`
+		Players []struct {
+			ID string `json:"id"`
+		} `json:"players"`
+	}
+	decode(t, session, &game)
+	request(t, h, http.MethodPatch, "/v1/sessions/"+game.ID+"/scores", map[string]any{"playerId": game.Players[0].ID, "fieldId": ruleBody.Fields[0].ID, "value": 5}, "")
+	request(t, h, http.MethodPost, "/v1/sessions/"+game.ID+"/finish", nil, owner.HostToken)
+	stats := requestAuth(t, h, http.MethodGet, "/v1/me/stats", nil, ana.Token)
+	var result struct{ FinishedGames, Wins, Ties, TotalPoints int }
+	decode(t, stats, &result)
+	if result.FinishedGames != 1 || result.Wins != 1 || result.Ties != 0 || result.TotalPoints != 5 {
+		t.Fatalf("wrong stats: %#v", result)
+	}
+	mySessions := requestAuth(t, h, http.MethodGet, "/v1/me/sessions", nil, ana.Token)
+	var linked []struct {
+		ID         string `json:"id"`
+		GameName   string `json:"gameName"`
+		MyPlayerID string `json:"myPlayerId"`
+		Winners    []struct {
+			PlayerID string `json:"playerId"`
+		} `json:"winners"`
+	}
+	decode(t, mySessions, &linked)
+	if len(linked) != 1 || linked[0].ID != game.ID || linked[0].GameName != "Example" || linked[0].MyPlayerID != game.Players[0].ID || len(linked[0].Winners) != 1 || linked[0].Winners[0].PlayerID != game.Players[0].ID {
+		t.Fatalf("account history omitted the game or winner: %#v", linked)
+	}
+	other := request(t, h, http.MethodPost, "/v1/auth/signup", map[string]string{"username": "Leo", "password": "another secure password"}, "")
+	var leo struct {
+		Token string `json:"token"`
+	}
+	decode(t, other, &leo)
+	otherSessions := requestAuth(t, h, http.MethodGet, "/v1/me/sessions", nil, leo.Token)
+	var none []any
+	decode(t, otherSessions, &none)
+	if len(none) != 0 {
+		t.Fatalf("another account can see Ana's sessions")
+	}
+	logout := requestAuth(t, h, http.MethodPost, "/v1/auth/logout", nil, ana.Token)
+	if logout.Code != http.StatusOK || requestAuth(t, h, http.MethodGet, "/v1/me", nil, ana.Token).Code != http.StatusUnauthorized {
+		t.Fatal("logout did not revoke session")
 	}
 }
 
@@ -171,16 +304,32 @@ func TestBGGRulesRoute(t *testing.T) {
 
 func TestCommunityScoringRulesOnlyShowSharedTemplates(t *testing.T) {
 	h := httpapi.New(store.NewMemoryStore()).Handler()
+	signup := request(t, h, http.MethodPost, "/v1/auth/signup", map[string]string{"username": "ana", "password": "correct horse battery staple"}, "")
+	if signup.Code != http.StatusCreated {
+		t.Fatalf("signup: %d: %s", signup.Code, signup.Body.String())
+	}
+	var account struct {
+		Token string `json:"token"`
+	}
+	decode(t, signup, &account)
 	for _, rule := range []map[string]any{
 		{"gameName": "Wingspan", "name": "Bird points", "bggId": 266192, "isPublic": true},
 		{"gameName": "Wingspan", "name": "Private draft", "bggId": 266192, "isPublic": false},
 		{"gameName": "Azul", "name": "Tile points", "bggId": 230802, "isPublic": true},
 	} {
 		rule["fields"] = []map[string]any{{"name": "Points", "kind": "counter", "pointsPerUnit": 1}}
-		response := request(t, h, http.MethodPost, "/v1/scoring-rules", rule, "")
+		response := requestAuth(t, h, http.MethodPost, "/v1/scoring-rules", rule, account.Token)
 		if response.Code != http.StatusCreated {
 			t.Fatalf("create rule: %d: %s", response.Code, response.Body.String())
 		}
+	}
+	all := request(t, h, http.MethodGet, "/v1/scoring-rules", nil, "")
+	var allRules []struct {
+		ID string `json:"id"`
+	}
+	decode(t, all, &allRules)
+	if all.Code != http.StatusOK || len(allRules) != 3 {
+		t.Fatalf("database sheet list: %d, %d rules", all.Code, len(allRules))
 	}
 	response := request(t, h, http.MethodGet, "/v1/community/scoring-rules?query=wing&bggId=266192", nil, "")
 	if response.Code != http.StatusOK {
@@ -256,6 +405,25 @@ func request(t *testing.T, h http.Handler, method, path string, body any, token 
 	r := httptest.NewRequest(method, path, bytes.NewReader(raw))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("X-Table-Token", token)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, r)
+	return w
+}
+
+func requestAuth(t *testing.T, h http.Handler, method, path string, body any, token string) *httptest.ResponseRecorder {
+	return requestBoth(t, h, method, path, body, token, "")
+}
+
+func requestBoth(t *testing.T, h http.Handler, method, path string, body any, token, hostToken string) *httptest.ResponseRecorder {
+	t.Helper()
+	raw, err := json.Marshal(body)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest(method, path, bytes.NewReader(raw))
+	r.Header.Set("Content-Type", "application/json")
+	r.Header.Set("Authorization", "Bearer "+token)
+	r.Header.Set("X-Table-Token", hostToken)
 	w := httptest.NewRecorder()
 	h.ServeHTTP(w, r)
 	return w

@@ -28,7 +28,8 @@ type playerTotal struct {
 
 type sessionResponse struct {
 	domain.ScoreSession
-	Totals []playerTotal `json:"totals"`
+	Totals  []playerTotal `json:"totals"`
+	Winners []playerTotal `json:"winners"`
 }
 
 func New(s store.Repository, clients ...*bgg.Client) *API {
@@ -42,7 +43,7 @@ func New(s store.Repository, clients ...*bgg.Client) *API {
 func (a *API) Handler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Table-Token")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Table-Token, Authorization")
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
@@ -57,6 +58,20 @@ func (a *API) route(w http.ResponseWriter, r *http.Request) {
 	switch {
 	case r.Method == http.MethodGet && p == "/health":
 		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+	case r.Method == http.MethodPost && p == "/v1/auth/signup":
+		a.signUp(w, r)
+	case r.Method == http.MethodPost && p == "/v1/auth/login":
+		a.logIn(w, r)
+	case r.Method == http.MethodPost && p == "/v1/auth/logout":
+		a.logOut(w, r)
+	case r.Method == http.MethodGet && p == "/v1/me":
+		a.getMe(w, r)
+	case r.Method == http.MethodGet && p == "/v1/me/sessions":
+		a.getMySessions(w, r)
+	case r.Method == http.MethodGet && p == "/v1/me/stats":
+		a.getMyStats(w, r)
+	case r.Method == http.MethodPost && p == "/v1/me/claim-session":
+		a.claimSession(w, r)
 	case r.Method == http.MethodPost && p == "/v1/tables":
 		a.createTable(w, r)
 	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/bgg/collections/"):
@@ -216,6 +231,11 @@ func (a *API) createRule(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	if input.IsPublic {
+		if _, ok := a.requireUser(w, r); !ok {
+			return
+		}
+	}
 	rule, err := a.store.CreateRule(input)
 	if err != nil {
 		writeStoreError(w, err)
@@ -237,10 +257,21 @@ func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	user, authenticated, err := a.optionalUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid session")
+		return
+	}
 	session, err := a.store.CreateSession(parts[3], r.Header.Get("X-Table-Token"), input.RuleID, input.Players)
 	if err != nil {
 		writeStoreError(w, err)
 		return
+	}
+	if authenticated && len(session.Players) > 0 {
+		if err := a.store.LinkUserSession(user.ID, session.ID, session.Players[0].ID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
 	}
 	a.writeSession(w, http.StatusCreated, session)
 }
@@ -392,6 +423,20 @@ func (a *API) adjustPoints(w http.ResponseWriter, r *http.Request) {
 
 func (a *API) finishSession(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimSuffix(strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/"), "/finish")
+	current, err := a.store.GetSession(id)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	table, err := a.store.GetTable(current.TableCode)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(table.HostToken), []byte(r.Header.Get("X-Table-Token"))) != 1 {
+		writeError(w, http.StatusForbidden, "host token required")
+		return
+	}
 	session, err := a.store.FinishSession(id)
 	if err != nil {
 		writeStoreError(w, err)
@@ -483,16 +528,26 @@ func writeStoreError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusNotFound, err.Error())
 	case errors.Is(err, store.ErrForbidden):
 		writeError(w, http.StatusForbidden, err.Error())
+	case errors.Is(err, store.ErrConflict):
+		writeError(w, http.StatusConflict, err.Error())
 	default:
 		writeError(w, http.StatusBadRequest, err.Error())
 	}
 }
 
 func (a *API) writeSession(w http.ResponseWriter, status int, session domain.ScoreSession) {
-	rule, err := a.store.GetRule(session.RuleID)
+	result, err := a.sessionResult(session)
 	if err != nil {
 		writeStoreError(w, err)
 		return
+	}
+	writeJSON(w, status, result)
+}
+
+func (a *API) sessionResult(session domain.ScoreSession) (sessionResponse, error) {
+	rule, err := a.store.GetRule(session.RuleID)
+	if err != nil {
+		return sessionResponse{}, err
 	}
 	fields := make(map[string]domain.ScoreField, len(rule.Fields))
 	for _, field := range rule.Fields {
@@ -511,5 +566,15 @@ func (a *API) writeSession(w http.ResponseWriter, status int, session domain.Sco
 		}
 		totals = append(totals, playerTotal{PlayerID: player.ID, Total: total})
 	}
-	writeJSON(w, status, sessionResponse{ScoreSession: session, Totals: totals})
+	winners := []playerTotal{}
+	if session.Status == "finished" {
+		for _, result := range totals {
+			if len(winners) == 0 || (rule.WinCondition == domain.WinConditionLowest && result.Total < winners[0].Total) || (rule.WinCondition != domain.WinConditionLowest && result.Total > winners[0].Total) {
+				winners = []playerTotal{result}
+			} else if result.Total == winners[0].Total {
+				winners = append(winners, result)
+			}
+		}
+	}
+	return sessionResponse{ScoreSession: session, Totals: totals, Winners: winners}, nil
 }

@@ -4,6 +4,13 @@ import "tablescore-api/internal/domain"
 
 // Repository is the persistence boundary used by the BFF.
 type Repository interface {
+	CreateUser(username, passwordHash string) (domain.User, error)
+	FindUser(username string) (domain.User, string, error)
+	SaveAuthSession(userID, tokenHash string, expiresAt int64) error
+	UserByAuthSession(tokenHash string) (domain.User, error)
+	DeleteAuthSession(tokenHash string) error
+	LinkUserSession(userID, sessionID, playerID string) error
+	ListUserSessions(userID string) ([]domain.UserSession, error)
 	CreateTable(name string) (domain.Table, error)
 	GetTable(code string) (domain.Table, error)
 	CreateRule(rule domain.ScoringRule) (domain.ScoringRule, error)

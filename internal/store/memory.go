@@ -16,21 +16,32 @@ var (
 	ErrNotFound   = errors.New("resource not found")
 	ErrForbidden  = errors.New("forbidden")
 	ErrValidation = errors.New("invalid input")
+	ErrConflict   = errors.New("resource already exists")
 )
 
 type MemoryStore struct {
-	mu       sync.RWMutex
-	tables   map[string]domain.Table
-	rules    map[string]domain.ScoringRule
-	sessions map[string]domain.ScoreSession
-	imports  map[string]domain.PDFImport
-	plans    map[string]domain.ScheduledGame
+	mu           sync.RWMutex
+	tables       map[string]domain.Table
+	rules        map[string]domain.ScoringRule
+	sessions     map[string]domain.ScoreSession
+	imports      map[string]domain.PDFImport
+	plans        map[string]domain.ScheduledGame
+	users        map[string]domain.User
+	passwords    map[string]string
+	authSessions map[string]memoryAuthSession
+	userSessions map[string]map[string]string
+}
+
+type memoryAuthSession struct {
+	userID    string
+	expiresAt int64
 }
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		tables: map[string]domain.Table{}, rules: map[string]domain.ScoringRule{},
 		sessions: map[string]domain.ScoreSession{}, imports: map[string]domain.PDFImport{}, plans: map[string]domain.ScheduledGame{},
+		users: map[string]domain.User{}, passwords: map[string]string{}, authSessions: map[string]memoryAuthSession{}, userSessions: map[string]map[string]string{},
 	}
 }
 

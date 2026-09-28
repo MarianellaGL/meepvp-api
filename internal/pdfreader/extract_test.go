@@ -55,6 +55,12 @@ func TestExtractProvidedPDF(t *testing.T) {
 		t.Fatalf("real PDF had no text: %#v", result)
 	}
 	t.Logf("pages=%d text_runes=%d scoring_excerpts=%d", result.Pages, len([]rune(result.Text)), len(result.Excerpts))
+	if strings.Contains(fileName, "everdell") || strings.Contains(fileName, "catan") {
+		if result.Suggestion == nil || len(result.Suggestion.Fields) != 5 {
+			t.Fatal("expected a reviewed scoring suggestion for the provided rulebook")
+		}
+		t.Logf("scoring suggestion: %s (%d fields)", result.Suggestion.GameName, len(result.Suggestion.Fields))
+	}
 }
 
 func testPDF(line string) []byte {
@@ -66,6 +72,10 @@ func testPDF(line string) []byte {
 		"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
 		fmt.Sprintf("<< /Length %d >>\nstream\n%s\nendstream", len(content), content),
 	}
+	return encodeTestPDF(objects)
+}
+
+func encodeTestPDF(objects []string) []byte {
 	var output bytes.Buffer
 	output.WriteString("%PDF-1.4\n")
 	offsets := []int{0}

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"tablescore-api/handlers"
 	"tablescore-api/internal/bgg"
 	"tablescore-api/internal/domain"
 	"tablescore-api/internal/pdfreader"
@@ -18,8 +19,9 @@ import (
 )
 
 type API struct {
-	store store.Repository
-	bgg   *bgg.Client
+	foundation *handlers.Deps
+	store      store.Repository
+	bgg        *bgg.Client
 }
 
 type playerTotal struct {
@@ -42,105 +44,19 @@ func New(s store.Repository, clients ...*bgg.Client) *API {
 	return &API{store: s, bgg: client}
 }
 
-func (a *API) Handler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Access-Control-Allow-Origin", "*")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, X-Table-Token, Authorization")
-		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, OPTIONS")
-		if r.Method == http.MethodOptions {
-			w.WriteHeader(http.StatusNoContent)
-			return
-		}
-		a.route(w, r)
-	})
-}
-
-func (a *API) route(w http.ResponseWriter, r *http.Request) {
-	p := path.Clean(r.URL.Path)
-	switch {
-	case r.Method == http.MethodGet && p == "/health":
-		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
-	case r.Method == http.MethodPost && p == "/v1/auth/signup":
-		a.signUp(w, r)
-	case r.Method == http.MethodPost && p == "/v1/auth/login":
-		a.logIn(w, r)
-	case r.Method == http.MethodPost && p == "/v1/auth/logout":
-		a.logOut(w, r)
-	case r.Method == http.MethodGet && p == "/v1/me":
-		a.getMe(w, r)
-	case r.Method == http.MethodGet && p == "/v1/me/sessions":
-		a.getMySessions(w, r)
-	case r.Method == http.MethodGet && p == "/v1/me/stats":
-		a.getMyStats(w, r)
-	case r.Method == http.MethodPost && p == "/v1/me/claim-session":
-		a.claimSession(w, r)
-	case r.Method == http.MethodPost && p == "/v1/tables":
-		a.createTable(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/tables/") && strings.HasSuffix(p, "/current-session"):
-		a.currentTableSession(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/bgg/collections/"):
-		a.getBGGCollection(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/bgg/games/") && strings.HasSuffix(p, "/rules"):
-		a.getBGGRules(w, r)
-	case r.Method == http.MethodPost && p == "/v1/pdf/extract":
-		a.extractPDF(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/tables/") && strings.HasSuffix(p, "/sessions"):
-		a.createSession(w, r)
-	case (r.Method == http.MethodPost || r.Method == http.MethodGet) && strings.HasPrefix(p, "/v1/tables/") && strings.HasSuffix(p, "/scheduled-games"):
-		a.scheduledGames(w, r)
-	case r.Method == http.MethodPatch && strings.HasPrefix(p, "/v1/scheduled-games/") && strings.HasSuffix(p, "/rule"):
-		a.setScheduledGameRule(w, r)
-	case r.Method == http.MethodPatch && strings.HasPrefix(p, "/v1/scheduled-games/") && strings.HasSuffix(p, "/session"):
-		a.setScheduledGameSession(w, r)
-	case r.Method == http.MethodPost && p == "/v1/scoring-rules":
-		a.createRule(w, r)
-	case r.Method == http.MethodGet && p == "/v1/scoring-rules":
-		a.listRules(w)
-	case r.Method == http.MethodGet && p == "/v1/community/scoring-rules":
-		a.searchPublicRules(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/scoring-rules/") && strings.HasSuffix(p, "/pdf-imports"):
-		a.createPDFImport(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/board-photo"):
-		a.getBoardPhoto(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/board-photo"):
-		a.saveBoardPhoto(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/sessions/"):
-		a.getSession(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/players"):
-		a.addPlayer(w, r)
-	case r.Method == http.MethodPut && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/scores"):
-		a.updateScores(w, r)
-	case r.Method == http.MethodPatch && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/scores"):
-		a.setScore(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/points"):
-		a.adjustPoints(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/finish"):
-		a.finishSession(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/pause"):
-		a.pauseSession(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/resume"):
-		a.resumeSession(w, r)
-	case r.Method == http.MethodPost && strings.HasPrefix(p, "/v1/sessions/") && strings.HasSuffix(p, "/reopen"):
-		a.reopenSession(w, r)
-	case r.Method == http.MethodGet && strings.HasPrefix(p, "/v1/pdf-imports/"):
-		a.getPDFImport(w, r)
-	default:
-		writeError(w, http.StatusNotFound, "route not found")
-	}
-}
-
 func (a *API) extractPDF(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, pdfreader.MaxFileBytes+(1<<20))
 	if err := r.ParseMultipartForm(pdfreader.MaxFileBytes); err != nil {
 		writeError(w, http.StatusBadRequest, "a PDF file up to 20 MB is required")
 		return
 	}
+	defer func() { _ = r.MultipartForm.RemoveAll() }()
 	file, header, err := r.FormFile("file")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "file is required")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, pdfreader.MaxFileBytes+1))
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "could not read PDF")
@@ -511,14 +427,14 @@ func (a *API) saveBoardPhoto(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if r.MultipartForm != nil {
-		defer r.MultipartForm.RemoveAll()
+		defer func() { _ = r.MultipartForm.RemoveAll() }()
 	}
 	file, _, err := r.FormFile("file")
 	if err != nil {
 		writeError(w, http.StatusBadRequest, "file is required")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	data, err := io.ReadAll(io.LimitReader(file, maxBoardPhotoBytes+1))
 	if err != nil || len(data) == 0 || len(data) > maxBoardPhotoBytes {
 		writeError(w, http.StatusBadRequest, "an image up to 5 MB is required")
@@ -566,7 +482,7 @@ func (a *API) createPDFImport(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "file is required")
 		return
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if !strings.HasSuffix(strings.ToLower(header.Filename), ".pdf") {
 		writeError(w, http.StatusBadRequest, "file must be a PDF")
 		return

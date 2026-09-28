@@ -1,0 +1,7 @@
+.git
+.env
+.env.*
+config.yaml
+bin
+tmp
+.worktrees

@@ -1,7 +1,6 @@
 package auth
 
 import (
-	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
@@ -10,6 +9,7 @@ import (
 	"strings"
 
 	"crypto/pbkdf2"
+	foundationauth "tablescore-api/auth"
 )
 
 const iterations = 600000
@@ -21,18 +21,14 @@ func Hash(password string) (string, error) {
 	if len(password) < 12 || len(password) > 1024 {
 		return "", ErrInvalidPassword
 	}
-	salt := make([]byte, 16)
-	if _, err := rand.Read(salt); err != nil {
-		return "", err
-	}
-	key, err := pbkdf2.Key(sha256.New, password, salt, iterations, 32)
-	if err != nil {
-		return "", err
-	}
-	return "pbkdf2_sha256$" + strconv.Itoa(iterations) + "$" + base64.RawStdEncoding.EncodeToString(salt) + "$" + base64.RawStdEncoding.EncodeToString(key), nil
+	return foundationauth.HashPassword(password)
 }
 
 func Verify(password, encoded string) bool {
+	if strings.HasPrefix(encoded, "$argon2id$") {
+		valid, err := foundationauth.VerifyPassword(password, encoded)
+		return err == nil && valid
+	}
 	parts := strings.Split(encoded, "$")
 	if len(parts) != 4 || parts[0] != "pbkdf2_sha256" || len(password) > 1024 {
 		return false

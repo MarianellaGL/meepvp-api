@@ -1,0 +1,9 @@
+{
+ "name": "MeepVP API",
+ "dockerComposeFile": "docker-compose.yml",
+ "service": "app",
+ "workspaceFolder": "/workspace",
+ "customizations": {"vscode": {"extensions": ["golang.go", "ms-azuretools.vscode-docker", "redhat.vscode-yaml"], "settings": {"editor.formatOnSave": true}}},
+ "postCreateCommand": "go mod download",
+ "forwardPorts": [8080, 5432]
+}

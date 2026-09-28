@@ -59,9 +59,9 @@ func extractWithPDFKit(data []byte, fileName string) (Result, error) {
 	if err != nil {
 		return Result{}, fmt.Errorf("could not prepare PDF fallback: %w", err)
 	}
-	defer os.Remove(file.Name())
+	defer func() { _ = os.Remove(file.Name()) }()
 	if _, err = file.Write(data); err != nil {
-		file.Close()
+		_ = file.Close()
 		return Result{}, fmt.Errorf("could not prepare PDF fallback: %w", err)
 	}
 	if err = file.Close(); err != nil {

@@ -103,7 +103,7 @@ func (c *Client) readXML(ctx context.Context, path string, query url.Values, tar
 	if err != nil {
 		return 0, 0, fmt.Errorf("request BGG %s: %w", strings.TrimPrefix(path, "/"), err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == http.StatusAccepted {
 		return response.StatusCode, retryAfter(response), nil
 	}

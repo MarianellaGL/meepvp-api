@@ -83,7 +83,7 @@ func (c *Client) Collection(ctx context.Context, username string) (CollectionRes
 	if err != nil {
 		return CollectionResult{}, fmt.Errorf("request BGG collection: %w", err)
 	}
-	defer response.Body.Close()
+	defer func() { _ = response.Body.Close() }()
 	if response.StatusCode == http.StatusAccepted {
 		return CollectionResult{Status: "processing", RetryAfterSeconds: retryAfter(response)}, nil
 	}

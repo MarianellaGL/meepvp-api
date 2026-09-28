@@ -1,0 +1,67 @@
+# Every field can be overridden by an environment variable (DATABASE_URL, APP_ENV, SERVER_PORT,
+# SERVER_BASE_URL, SERVER_TRUSTED_PROXIES, DB_HOST, DB_PORT, DB_USER, DB_PASSWORD,
+# DB_NAME, DB_SSLMODE, LOG_LEVEL, AUTH_JWT_SECRET, AUTH_SESSION_SECRET,
+# AUTH_ACCESS_TOKEN_EXPIRY, AUTH_REFRESH_TOKEN_EXPIRY, AUTH_GOOGLE_CLIENT_ID,
+# AUTH_GOOGLE_CLIENT_SECRET, AUTH_GITHUB_CLIENT_ID, AUTH_GITHUB_CLIENT_SECRET,
+# AUTH_APPLE_CLIENT_ID, AUTH_APPLE_TEAM_ID, AUTH_APPLE_KEY_ID, AUTH_APPLE_PRIVATE_KEY,
+# SMTP_HOST, SMTP_PORT, SMTP_USERNAME, SMTP_PASSWORD, SMTP_FROM, SMTP_TLS).
+# If config.yaml is absent the server reads env only.
+
+database_url: "" # DATABASE_URL overrides db.* when set
+env: dev
+
+server:
+  port: 8080
+  # base_url is used for OAuth callback URLs and for the production WebSocket origin
+  # allowlist. Set to your public URL in production, where the server refuses to start
+  # unless it is an absolute URL (scheme://host).
+  base_url: "http://localhost:8080"
+  # IPs/CIDRs of reverse proxies whose X-Forwarded-For is trusted (rate limiting, logging).
+  # Empty trusts all proxies in dev and production. Optionally specify IPs/CIDRs.
+  trusted_proxies: []
+
+db:
+  host: 127.0.0.1
+  port: 5432
+  user: tablescore
+  password: tablescore
+  dbname: tablescore
+  sslmode: disable
+
+log:
+  level: debug
+
+auth:
+  # REQUIRED in every environment: the server refuses to start when this is empty.
+  # In production it must also be non-default and at least 32 characters.
+  # Generate one with: openssl rand -base64 64
+  jwt_secret: change-me-to-a-random-64-char-string
+  # Signs the short-lived OAuth state cookie. Falls back to jwt_secret when empty.
+  session_secret: ""
+  access_token_expiry: 15m
+  refresh_token_expiry: 168h
+  google:
+    client_id: ""
+    client_secret: ""
+  github:
+    client_id: ""
+    client_secret: ""
+  apple:
+    client_id: ""
+    team_id: ""
+    key_id: ""
+    private_key: ""
+
+smtp:
+  # Leave host empty in local dev: emails are written to the log instead of sent,
+  # with the verification / reset link in the body. In production the server
+  # refuses to start without a host.
+  host: ""
+  # Must be 1-65535; 0 (or omitted) defaults to 587.
+  port: 587
+  username: ""
+  password: ""
+  # The display name doubles as the product name inside email templates.
+  from: "MeppVP <no-reply@example.com>"
+  # starttls (port 587), tls (implicit TLS, port 465) or none (local relays only).
+  tls: starttls

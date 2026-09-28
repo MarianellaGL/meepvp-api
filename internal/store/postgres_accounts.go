@@ -25,7 +25,7 @@ func (s *PostgresStore) CreateUser(username, passwordHash string) (domain.User, 
 func (s *PostgresStore) FindUser(username string) (domain.User, string, error) {
 	var user domain.User
 	var passwordHash string
-	err := s.db.QueryRow(`SELECT id, username, password_hash, created_at FROM users WHERE username_key = $1`, strings.ToLower(username)).Scan(&user.ID, &user.Username, &passwordHash, &user.CreatedAt)
+	err := s.db.QueryRow(`SELECT id, username, password_hash, created_at FROM users WHERE username_key = $1 AND deleted_at IS NULL`, strings.ToLower(username)).Scan(&user.ID, &user.Username, &passwordHash, &user.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.User{}, "", ErrNotFound
 	}
@@ -39,7 +39,7 @@ func (s *PostgresStore) SaveAuthSession(userID, tokenHash string, expiresAt int6
 
 func (s *PostgresStore) UserByAuthSession(tokenHash string) (domain.User, error) {
 	var user domain.User
-	err := s.db.QueryRow(`SELECT u.id, u.username, u.created_at FROM auth_sessions a JOIN users u ON u.id = a.user_id WHERE a.token_hash = $1 AND a.expires_at > now()`, tokenHash).Scan(&user.ID, &user.Username, &user.CreatedAt)
+	err := s.db.QueryRow(`SELECT u.id, u.username, u.created_at FROM auth_sessions a JOIN users u ON u.id = a.user_id WHERE a.token_hash = $1 AND a.expires_at > now() AND u.deleted_at IS NULL`, tokenHash).Scan(&user.ID, &user.Username, &user.CreatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.User{}, ErrNotFound
 	}
@@ -87,7 +87,7 @@ func (s *PostgresStore) ListUserSessions(userID string) ([]domain.UserSession, e
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	result := []domain.UserSession{}
 	for rows.Next() {
 		var payload []byte

@@ -5,6 +5,11 @@ services:
       POSTGRES_DB: tablescore
       POSTGRES_USER: tablescore
       POSTGRES_PASSWORD: tablescore
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U tablescore -d tablescore"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
     ports:
       - "5432:5432"
     volumes:

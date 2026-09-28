@@ -1,0 +1,9 @@
+Hi {{if .Name}}{{.Name}}{{else}}there{{end}},
+
+Welcome to {{.AppName}}. Please confirm your email address by opening this link:
+
+{{.Link}}
+
+The link expires in {{.ExpiresIn}}. If you did not create an account, you can ignore this email.
+
+— {{.AppName}}

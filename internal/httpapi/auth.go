@@ -12,9 +12,11 @@ import (
 	"strings"
 	"time"
 
+	foundationauth "tablescore-api/auth"
 	"tablescore-api/internal/auth"
 	"tablescore-api/internal/domain"
 	"tablescore-api/internal/store"
+	"tablescore-api/services"
 )
 
 const authLifetime = 30 * 24 * time.Hour
@@ -93,6 +95,25 @@ func tokenHash(token string) string {
 
 func (a *API) optionalUser(r *http.Request) (domain.User, bool, error) {
 	header := r.Header.Get("Authorization")
+	if a.foundation != nil {
+		token := strings.TrimPrefix(header, "Bearer ")
+		if header == "" {
+			if cookie, err := r.Cookie(foundationauth.CookieAccessToken); err == nil {
+				token = cookie.Value
+			}
+		}
+		if strings.Count(token, ".") == 2 {
+			claims, err := foundationauth.ParseAccessToken(token, a.foundation.Cfg.Auth.JWTSecret)
+			if err != nil {
+				return domain.User{}, false, err
+			}
+			user, err := services.GetUserByID(a.foundation.DB, claims.UserID)
+			if err != nil {
+				return domain.User{}, false, err
+			}
+			return domain.User{ID: user.ID, Username: user.Username, CreatedAt: user.CreatedAt}, true, nil
+		}
+	}
 	if header == "" {
 		return domain.User{}, false, nil
 	}
@@ -121,6 +142,16 @@ func (a *API) logOut(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	token := strings.TrimPrefix(r.Header.Get("Authorization"), "Bearer ")
+	if a.foundation != nil && (strings.Count(token, ".") == 2 || token == "") {
+		if cookie, err := r.Cookie(foundationauth.CookieRefreshToken); err == nil {
+			_ = services.RevokeRefreshToken(a.foundation.DB, cookie.Value)
+		}
+		for _, item := range []struct{ name, path string }{{foundationauth.CookieAccessToken, "/"}, {foundationauth.CookieRefreshToken, foundationauth.RefreshTokenCookiePath}} {
+			http.SetCookie(w, &http.Cookie{Name: item.name, Path: item.path, MaxAge: -1, HttpOnly: true, Secure: a.foundation.Cfg.IsProd(), SameSite: http.SameSiteLaxMode})
+		}
+		writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+		return
+	}
 	if err := a.store.DeleteAuthSession(tokenHash(token)); err != nil {
 		writeError(w, http.StatusInternalServerError, "could not log out")
 		return

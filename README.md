@@ -1,6 +1,54 @@
-# MeepVP API
+# MeppVP API
 
-Go API for the MeepVP board-game scoring app. It stores scoring sheets, tables, game sessions, schedules, and user accounts in PostgreSQL. The Go module and local Docker database still use the original `tablescore` identifiers to preserve existing data and imports.
+Go API for the MeppVP board-game scoring app. It stores scoring sheets, tables, game sessions, schedules, and user accounts in PostgreSQL. The Go module and local Docker database still use the original `tablescore` identifiers to preserve existing data and imports.
+
+Routing uses Gin with the existing `/v1` JSON API. Every response includes an
+`X-Request-ID`; structured logs include the route, status, latency, client IP
+and request ID, omitting bodies, query strings and tokens. Panics before a
+response is written return a generic JSON 500. Gin trusts all proxies by default,
+accepting forwarded client IPs in dev and production.
+
+Login and signup share a limit of 20 requests per minute per IP, per server
+process. Blocked requests return JSON 429 with a positive `Retry-After` in seconds.
+Logout, account reads and scoring remain outside this limit. CORS exposes
+`X-Request-ID` and `Retry-After` to browser clients.
+
+The server sets header, read, write and idle timeouts, allowing up to three
+minutes for responses including PDF extraction. SIGINT and SIGTERM drain
+in-flight requests for up to ten seconds before closing the database.
+
+## Foundation backend
+
+The backend adopts [Foundation](FOUNDATION.md): Gin, GORM/PostgreSQL, cleanenv,
+slog/tint, Goose migrations, Argon2id, JWT with rotating refresh tokens, goth
+OAuth, SMTP email verification/password reset, admin roles/settings and the
+WebSocket hub. The mobile app remains the frontend. Existing `/v1` endpoints,
+accounts, bearer sessions and game records stay compatible; new Foundation
+features are exposed under `/api` and `/ws`.
+
+```sh
+make setup
+make docker-up
+make run
+# Process supervision and live reload:
+make dev
+# Server and admin CLI:
+make build
+# Dedicated integration database only:
+TEST_DATABASE_URL=postgres://tablescore:tablescore@localhost:5432/tablescore_test?sslmode=disable make test-integration
+```
+
+Copy `config.example.yaml` to `config.yaml` if needed. Set `AUTH_JWT_SECRET` (or
+`auth.jwt_secret`) to a persistent random secret. Existing `DATABASE_URL` and
+`PORT` values in `.env` still work; environment variables override YAML. Configure
+OAuth credentials and `server.base_url` to activate social login, and SMTP to
+send emails (development logs them). Create an admin with:
+
+```sh
+go run ./cmd/cli adduser --email admin@example.com --name Admin --password 'ReplaceWithYourPassword123!' --admin
+```
+
+See [FOUNDATION.md](FOUNDATION.md) for routes, compatibility and migration details.
 
 ## Run locally
 
@@ -21,7 +69,7 @@ Point the mobile app's `EXPO_PUBLIC_API_URL` at this server. Use a LAN IP instea
 
 ## Accounts and statistics
 
-Accounts are optional for playing. Sign up with a 3–30 character username containing letters, numbers, or underscores, and a password of 12–1024 bytes. Passwords are stored as salted PBKDF2-HMAC-SHA256 hashes with 600,000 iterations; plaintext passwords are never saved. The API issues random bearer tokens, stores only their SHA-256 hashes, and expires them after 30 days. Use HTTPS outside local development.
+Accounts are optional for playing. Sign up with a 3–30 character username containing letters, numbers, or underscores, and a password of 12–1024 bytes. New passwords are stored as salted Argon2id hashes; existing PBKDF2-HMAC-SHA256 hashes remain supported; plaintext passwords are never saved. The API issues random bearer tokens, stores only their SHA-256 hashes, and expires them after 30 days. Use HTTPS outside local development.
 
 | Method | Route | Purpose |
 | --- | --- | --- |
@@ -87,8 +135,14 @@ Sessions now return `durationSeconds`, the time actually played. Pausing stores 
 
 `POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. The legacy PDF import route has no worker yet, so its jobs stay queued. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
 
-On macOS, extraction retries with PDFKit through the `swift` command from Xcode Command Line Tools when the Go parser fails or a page has no selectable text. Vision OCR reads those scanned pages. The fallback writes the upload to a private temporary file and removes it after extraction. Other platforms still use the Go parser only and return no text for image-only scans.
+When installed, Poppler extracts text with column layout; Tesseract reads pages without selectable text using English and Spanish language data. The Docker image includes both. On macOS without Poppler, extraction uses the Go parser with PDFKit/Vision as a fallback via Xcode Command Line Tools. Temporary uploads and rendered pages are removed after extraction. For local Poppler/OCR support, install `poppler`, `tesseract`, and its English/Spanish language data.
+
+The response can include `scoringSuggestion: {gameName, fields, notes}`. Reviewed base-game templates are selected only when the extracted text contains the game's name and its scoring breakdown; filenames alone never select one. Everdell imports five manual point categories. Catan imports settlement/city/VP-card counters and the two unique bonus checkboxes. The mobile reader previews the suggestion and preserves field kinds and multipliers in the editable creation form. Unknown rulebooks still return text and excerpts; existing printed scoring sheets remain supported.
+
+These templates cover scorekeeping for the base games. Everdell tie-breakers and Catan's own-turn victory condition are described for review, but the generic ranking engine still uses totals and does not enforce either. Catan's hidden VP cards should be entered at the end when using a shared sheet. Expansions and Everdell solo scoring require manual review. Re-upload older saved rulebooks to receive the new suggestion metadata.
+
+Validate a downloaded rulebook with `TABLESCORE_TEST_PDF=/path/to/rulebook.pdf go test ./internal/pdfreader -run TestExtractProvidedPDF -v`. The PDFs themselves are never committed.
 
 ## Current limits
 
-`GET /v1/scoring-rules` currently lists **all** sheets to unauthenticated callers, including sheets omitted from community search. `isPublic: false` means unlisted, not private. Do not store confidential material in scoring sheets. Authentication protects account statistics, while anonymous tables and session IDs retain their existing access model. Rate limiting, password recovery, email verification, and publication moderation are still needed before exposing account creation and community publishing broadly on the public internet.
+`GET /v1/scoring-rules` currently lists **all** sheets to unauthenticated callers, including sheets omitted from community search. `isPublic: false` means unlisted, not private. Do not store confidential material in scoring sheets. Authentication protects account statistics, while anonymous tables and session IDs retain their existing access model. Foundation provides email verification and password recovery for email accounts. Publication moderation remains application-specific. Existing username-only mobile accounts do not have an email address to use for recovery.

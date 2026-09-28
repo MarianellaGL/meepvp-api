@@ -1,0 +1,49 @@
+# make dev runs this with process-compose, pinned in tools/go.mod.
+version: "0.5"
+
+# Claude Code (via .mcp.json) and other MCP clients get the pc_* tools: list
+# processes, read and search their logs, restart one. Only up while make dev is.
+mcp_server:
+  host: localhost
+  port: 8765
+  expose_control_tools: true
+
+processes:
+  # Starts the docker compose Postgres if it isn't up, waits for its
+  # healthcheck, then follows its logs. Quitting stops the log tail only: the
+  # container keeps running (make docker-down stops it). Without docker (the
+  # devcontainer runs Postgres as a sidecar) it just reports that and idles.
+  db:
+    command: |
+      if ! command -v docker >/dev/null 2>&1; then
+        echo "docker not found: expecting Postgres at db.host in config.yaml"
+        exec sleep 2147483647
+      fi
+      docker compose up -d --wait postgres && exec docker compose logs -f --tail 20 postgres
+    readiness_probe:
+      exec:
+        command: "! command -v docker >/dev/null 2>&1 || docker compose exec -T postgres pg_isready -U tablescore -q"
+      period_seconds: 2
+      failure_threshold: 30
+
+  # Live reload: process-compose rebuilds and restarts the server itself when a
+  # watched file changes, so it supervises the real server rather than a
+  # watcher wrapped around it. A crash restarts it after a backoff. The cap
+  # stops a broken build from looping, and the next save resets the count.
+  # It waits for db because the server exits when the database is unreachable.
+  api:
+    command: go build -o ./tmp/server ./cmd/server && exec ./tmp/server
+    depends_on:
+      db:
+        condition: process_healthy
+    availability:
+      restart: on_failure
+      backoff_seconds: 2
+      max_restarts: 3
+    watch:
+      debounce: 500ms
+      paths:
+        # sql: migrations are embedded, so a new one needs a rebuild.
+        - path: .
+          include: ["*.go", "*.yaml", "*.sql"]
+          exclude: ["*_test.go", "web/**", "tmp/**", "docs/**", ".worktrees/**", ".pnpm-store/**"]

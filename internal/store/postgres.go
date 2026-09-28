@@ -7,44 +7,36 @@ import (
 	"strings"
 	"time"
 
-	_ "github.com/jackc/pgx/v5/stdlib"
+	"gorm.io/gorm"
+	"tablescore-api/models"
 
 	"tablescore-api/internal/domain"
 )
 
-type PostgresStore struct{ db *sql.DB }
+type PostgresStore struct {
+	db  *sql.DB
+	orm *gorm.DB
+}
 
 func OpenPostgres(databaseURL string) (*PostgresStore, error) {
-	db, err := sql.Open("pgx", databaseURL)
+	db, err := models.OpenDSN(databaseURL)
 	if err != nil {
 		return nil, err
 	}
-	db.SetMaxOpenConns(10)
-	db.SetConnMaxLifetime(30 * time.Minute)
-	if err := db.Ping(); err != nil {
-		db.Close()
-		return nil, err
-	}
-	return &PostgresStore{db: db}, nil
+	return NewPostgresStore(db)
 }
 
 func (s *PostgresStore) Close() error { return s.db.Close() }
 
-func (s *PostgresStore) Migrate() error {
-	_, err := s.db.Exec(`
-CREATE TABLE IF NOT EXISTS game_tables (code TEXT PRIMARY KEY, host_token TEXT NOT NULL, data JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL);
-CREATE TABLE IF NOT EXISTS scoring_rules (id TEXT PRIMARY KEY, data JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL);
-CREATE TABLE IF NOT EXISTS score_sessions (id TEXT PRIMARY KEY, table_code TEXT NOT NULL REFERENCES game_tables(code), rule_id TEXT NOT NULL REFERENCES scoring_rules(id), data JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL);
-CREATE TABLE IF NOT EXISTS pdf_imports (id TEXT PRIMARY KEY, rule_id TEXT NOT NULL REFERENCES scoring_rules(id), data JSONB NOT NULL, created_at TIMESTAMPTZ NOT NULL);
-CREATE TABLE IF NOT EXISTS scheduled_games (id TEXT PRIMARY KEY, table_code TEXT NOT NULL REFERENCES game_tables(code), data JSONB NOT NULL, scheduled_at TIMESTAMPTZ NOT NULL, created_at TIMESTAMPTZ NOT NULL);
-CREATE TABLE IF NOT EXISTS users (id TEXT PRIMARY KEY, username TEXT NOT NULL, username_key TEXT NOT NULL UNIQUE, password_hash TEXT NOT NULL, created_at TIMESTAMPTZ NOT NULL);
-CREATE TABLE IF NOT EXISTS auth_sessions (token_hash TEXT PRIMARY KEY, user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TIMESTAMPTZ NOT NULL);
-CREATE TABLE IF NOT EXISTS user_game_sessions (user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE, session_id TEXT NOT NULL REFERENCES score_sessions(id) ON DELETE CASCADE, player_id TEXT NOT NULL, PRIMARY KEY (user_id, session_id), UNIQUE (session_id, player_id));
-CREATE TABLE IF NOT EXISTS session_board_photos (session_id TEXT PRIMARY KEY REFERENCES score_sessions(id) ON DELETE CASCADE, image_data BYTEA NOT NULL, content_type TEXT NOT NULL, uploaded_at TIMESTAMPTZ NOT NULL);
-CREATE INDEX IF NOT EXISTS score_sessions_table_code_idx ON score_sessions(table_code);
-CREATE INDEX IF NOT EXISTS scoring_rules_created_at_idx ON scoring_rules(created_at DESC);
-CREATE INDEX IF NOT EXISTS scheduled_games_table_time_idx ON scheduled_games(table_code, scheduled_at);`)
-	return err
+func (s *PostgresStore) Migrate() error { return models.Migrate(s.orm) }
+
+// NewPostgresStore reuses Foundation's GORM pool for existing game transactions.
+func NewPostgresStore(db *gorm.DB) (*PostgresStore, error) {
+	pool, err := db.DB()
+	if err != nil {
+		return nil, err
+	}
+	return &PostgresStore{db: pool, orm: db}, nil
 }
 
 func (s *PostgresStore) CreateTable(name string) (domain.Table, error) {
@@ -86,7 +78,7 @@ func (s *PostgresStore) ListRules() ([]domain.ScoringRule, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	rules := []domain.ScoringRule{}
 	for rows.Next() {
 		var payload []byte
@@ -111,7 +103,7 @@ ORDER BY created_at DESC LIMIT 50`, strings.TrimSpace(query), bggID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	rules := []domain.ScoringRule{}
 	for rows.Next() {
 		var payload []byte
@@ -210,7 +202,7 @@ func (s *PostgresStore) AddPlayer(sessionID, name string) (domain.ScoreSession, 
 	if err != nil {
 		return domain.ScoreSession{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM score_sessions WHERE id = $1 FOR UPDATE`, sessionID).Scan(&payload); err != nil {
 		if err == sql.ErrNoRows {
@@ -249,7 +241,7 @@ func (s *PostgresStore) UpdateScores(sessionID string, values map[string]map[str
 	if err != nil {
 		return domain.ScoreSession{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM score_sessions WHERE id = $1 FOR UPDATE`, sessionID).Scan(&payload); err != nil {
 		if err == sql.ErrNoRows {
@@ -284,7 +276,7 @@ func (s *PostgresStore) SetScore(sessionID, playerID, fieldID string, value int)
 	if err != nil {
 		return domain.ScoreSession{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM score_sessions WHERE id = $1 FOR UPDATE`, sessionID).Scan(&payload); err != nil {
 		if err == sql.ErrNoRows {
@@ -329,7 +321,7 @@ func (s *PostgresStore) AdjustPoints(sessionID, playerID string, delta int) (dom
 	if err != nil {
 		return domain.ScoreSession{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM score_sessions WHERE id = $1 FOR UPDATE`, sessionID).Scan(&payload); err != nil {
 		if err == sql.ErrNoRows {
@@ -387,7 +379,7 @@ func (s *PostgresStore) updateSessionState(id, action string) (domain.ScoreSessi
 	if err != nil {
 		return domain.ScoreSession{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM score_sessions WHERE id = $1 FOR UPDATE`, id).Scan(&payload); err != nil {
 		if err == sql.ErrNoRows {
@@ -432,7 +424,7 @@ func (s *PostgresStore) SaveBoardPhoto(id string, data []byte, contentType strin
 	if err != nil {
 		return domain.ScoreSession{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM score_sessions WHERE id = $1 FOR UPDATE`, id).Scan(&payload); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -530,7 +522,7 @@ func (s *PostgresStore) ListScheduledGames(tableCode, hostToken string) ([]domai
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	games := []domain.ScheduledGame{}
 	for rows.Next() {
 		var payload []byte
@@ -551,7 +543,7 @@ func (s *PostgresStore) SetScheduledGameRule(id, hostToken, ruleID string) (doma
 	if err != nil {
 		return domain.ScheduledGame{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM scheduled_games WHERE id = $1 FOR UPDATE`, id).Scan(&payload); err != nil {
 		if err == sql.ErrNoRows {
@@ -588,7 +580,7 @@ func (s *PostgresStore) SetScheduledGameSession(id, hostToken, sessionID string)
 	if err != nil {
 		return domain.ScheduledGame{}, err
 	}
-	defer tx.Rollback()
+	defer func() { _ = tx.Rollback() }()
 	var payload []byte
 	if err := tx.QueryRow(`SELECT data FROM scheduled_games WHERE id = $1 FOR UPDATE`, id).Scan(&payload); err != nil {
 		if err == sql.ErrNoRows {

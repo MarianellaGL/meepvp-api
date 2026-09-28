@@ -3,6 +3,7 @@ package pdfreader
 import (
 	"bytes"
 	"fmt"
+	"os/exec"
 	"runtime"
 	"strings"
 	"unicode"
@@ -15,10 +16,11 @@ const maxPages = 100
 const maxTextRunes = 120000
 
 type Result struct {
-	FileName string   `json:"fileName"`
-	Pages    int      `json:"pages"`
-	Text     string   `json:"text"`
-	Excerpts []string `json:"scoringExcerpts"`
+	FileName   string             `json:"fileName"`
+	Pages      int                `json:"pages"`
+	Text       string             `json:"text"`
+	Excerpts   []string           `json:"scoringExcerpts"`
+	Suggestion *ScoringSuggestion `json:"scoringSuggestion,omitempty"`
 }
 
 func Extract(data []byte, fileName string) (result Result, err error) {
@@ -26,9 +28,15 @@ func Extract(data []byte, fileName string) (result Result, err error) {
 		if recovered := recover(); recovered != nil {
 			result, err = Result{}, fmt.Errorf("could not read this PDF")
 		}
+		if err == nil {
+			result.Suggestion = suggestScoring(result.Text)
+		}
 	}()
 	if len(data) < 5 || len(data) > MaxFileBytes || !bytes.HasPrefix(data, []byte("%PDF-")) {
 		return Result{}, fmt.Errorf("file must be a PDF up to 20 MB")
+	}
+	if _, lookupErr := exec.LookPath("pdftotext"); lookupErr == nil {
+		return extractWithPoppler(data, fileName)
 	}
 	reader, err := pdf.NewReader(bytes.NewReader(data), int64(len(data)))
 	if err != nil {

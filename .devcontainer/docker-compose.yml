@@ -1,0 +1,24 @@
+services:
+  app:
+    image: mcr.microsoft.com/devcontainers/go:1.27
+    volumes:
+      - ..:/workspace:cached
+    command: sleep infinity
+    environment:
+      DB_HOST: postgres
+      DB_USER: tablescore
+      DB_PASSWORD: tablescore
+      DB_NAME: tablescore
+      AUTH_JWT_SECRET: devcontainer-only-change-before-deploying
+    depends_on:
+      - postgres
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: tablescore
+      POSTGRES_USER: tablescore
+      POSTGRES_PASSWORD: tablescore
+    volumes:
+      - dev-db:/var/lib/postgresql/data
+volumes:
+  dev-db:

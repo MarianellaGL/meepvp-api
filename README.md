@@ -70,6 +70,13 @@ The image expects runtime configuration through environment variables, including
 `DATABASE_URL`, `AUTH_JWT_SECRET` and `SERVER_BASE_URL`. PostgreSQL runs separately;
 the image does not contain application data, local config or credentials.
 
+## Deploy on Render with Neon
+
+Use [render.yaml](render.yaml) to build the Go Docker image on Render while
+keeping PostgreSQL on the existing Neon production branch. See
+[DEPLOYMENT.md](DEPLOYMENT.md) for required variables, direct database connection
+selection, SMTP setup and deployment verification.
+
 ## Run locally
 
 ```sh

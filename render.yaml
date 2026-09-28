@@ -1,0 +1,41 @@
+# Assign this service to the existing MeppVP project in the Render dashboard.
+# PostgreSQL is hosted on Neon; this Blueprint only creates the Go API.
+services:
+  - type: web
+    name: meppvp-api
+    runtime: docker
+    repo: https://github.com/MarianellaGL/meepvp-api
+    branch: main
+    region: ohio
+    plan: free
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
+    # Deploy manually until the repository's Docker Hub publish check is fixed.
+    autoDeployTrigger: "off"
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: LOG_LEVEL
+        value: info
+      - key: AUTH_JWT_SECRET
+        generateValue: true
+      # Use Neon's DATABASE_URL_UNPOOLED here. Startup migrations take a
+      # session advisory lock, which requires a direct Postgres connection.
+      - key: DATABASE_URL
+        sync: false
+      - key: SERVER_BASE_URL
+        sync: false
+      - key: SMTP_HOST
+        sync: false
+      # Render Free blocks SMTP ports 25, 465 and 587.
+      - key: SMTP_PORT
+        value: "2525"
+      - key: SMTP_TLS
+        value: starttls
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false

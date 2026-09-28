@@ -61,8 +61,8 @@ Admin authorization checks the current database role, not just the JWT claim.
 Role changes and deletions revoke sessions and disconnect existing sockets.
 Create an initial admin explicitly with `cmd/cli adduser --admin`; startup does
 not create or print a default admin password. OAuth requires provider credentials
-and registered callback URLs. SMTP is required in production; development can
-log emails instead. Clients consume verification and reset tokens through the
+and registered callback URLs. SMTP is optional: production without a host disables
+email delivery, while development logs emails. Clients consume verification and reset tokens through the
 API; browser confirmation forms are available at the corresponding email links.
 
 ## WebSockets

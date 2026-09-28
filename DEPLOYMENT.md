@@ -32,17 +32,16 @@ to deploy only commits whose CI checks pass.
 | `SERVER_BASE_URL` | The service's public HTTPS URL; update it if adding a custom domain. |
 | `APP_ENV` | `production`, supplied by the Blueprint. |
 | `LOG_LEVEL` | `info`, supplied by the Blueprint. |
-| `SMTP_HOST` | Your transactional email provider's SMTP hostname. |
-| `SMTP_PORT` | `2525`, supplied by the Blueprint; confirm your provider supports it. |
-| `SMTP_TLS` | `starttls`, supplied by the Blueprint. |
-| `SMTP_USERNAME` / `SMTP_PASSWORD` | Your provider's credentials. |
-| `SMTP_FROM` | A verified sender, e.g. `MeppVP <no-reply@your-domain.com>`. |
 | `BGG_API_TOKEN` | Optional: add the existing BoardGameGeek token to enable authenticated BGG requests. |
 
 Render supplies `PORT`; the server already listens on that port on all interfaces.
-No local `.env` or `config.yaml` is included in the image. Production refuses to
-start without a configured mail provider, a strong JWT secret and an absolute
-base URL. Do not use development mode or a fake SMTP host to bypass these checks.
+No local `.env` or `config.yaml` is included in the image. Production requires
+a strong JWT secret and an absolute base URL. SMTP is optional. Without an
+SMTP host, production disables email delivery and never logs email bodies or
+verification/reset tokens. Registration and login keep working; accounts are
+not automatically marked as email-verified. Resend-verification and
+forgot-password return HTTP 503 with `email delivery is disabled`, without
+issuing tokens or claiming that an email was sent.
 
 The current server applies embedded Goose migrations at startup through the same
 GORM pool used by the app. Goose uses a **session advisory lock**, so use the
@@ -58,9 +57,11 @@ about a minute to wake. Clients should reconnect WebSockets after interruptions.
 The mobile app still needs its WebSocket subscription implemented; hosting the
 API does not add that client behavior.
 
-Render Free blocks outbound SMTP on ports 25, 465 and 587. Use a provider with
-STARTTLS on 2525, or add an HTTPS email adapter. Sending real emails requires
-valid provider credentials and a verified sender.
+If you later want email verification or password recovery, set `SMTP_HOST`,
+`SMTP_USERNAME`, `SMTP_PASSWORD` and a verified `SMTP_FROM`. Render Free blocks
+outbound SMTP on ports 25, 465 and 587; use a provider supporting
+`SMTP_PORT=2525` with `SMTP_TLS=starttls`, or add an HTTPS email adapter.
+Leave `SMTP_HOST` unset when email is not needed.
 
 No Render database or persistent disk is created. Game data, photos and user
 sessions remain in PostgreSQL; temporary PDF/OCR files use ephemeral storage.

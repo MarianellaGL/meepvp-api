@@ -91,9 +91,12 @@ const (
 	defaultSMTPPort = 587
 )
 
-// SMTPConfigured reports whether an SMTP host is set. When it is not, the
-// server logs emails instead of sending them.
+// SMTPConfigured reports whether an SMTP host is set. Without one, delivery is
+// disabled in production; development logs emails instead.
 func (c *Config) SMTPConfigured() bool { return c.SMTP.Host != "" }
+
+// EmailEnabled permits development logging, but never logs email tokens in production.
+func (c *Config) EmailEnabled() bool { return c.SMTPConfigured() || !c.IsProd() }
 
 // SMTPFrom returns smtp.from, or the default sender when it is empty.
 func (c *Config) SMTPFrom() string {
@@ -229,9 +232,6 @@ func (c *Config) Validate() error {
 	// The WebSocket origin allowlist is derived from base_url, so it must be absolute.
 	if u, err := url.Parse(c.Server.BaseURL); err != nil || u.Scheme == "" || u.Host == "" {
 		return fmt.Errorf("server.base_url must be an absolute URL (scheme://host) in production, got %q", c.Server.BaseURL)
-	}
-	if !c.SMTPConfigured() {
-		return errors.New("smtp.host must be set in production (emails cannot be logged instead of sent)")
 	}
 	return nil
 }

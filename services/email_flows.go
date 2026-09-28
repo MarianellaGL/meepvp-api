@@ -35,6 +35,9 @@ var (
 // link. It refuses when the address is already verified or when a link went
 // out within the cooldown, so the endpoint cannot be used to flood a mailbox.
 func SendVerificationEmail(ctx context.Context, db *gorm.DB, m mailer.Mailer, cfg *config.Config, user *models.User) error {
+	if !cfg.EmailEnabled() {
+		return mailer.ErrDisabled
+	}
 	if user.EmailVerifiedAt != nil {
 		return ErrAlreadyVerified
 	}
@@ -92,6 +95,9 @@ func VerifyEmail(db *gorm.DB, raw string) (*models.User, error) {
 // are a silent no-op: the caller must not be able to tell, so the endpoint
 // cannot be used to enumerate accounts.
 func RequestPasswordReset(ctx context.Context, db *gorm.DB, m mailer.Mailer, cfg *config.Config, email string) error {
+	if !cfg.EmailEnabled() {
+		return mailer.ErrDisabled
+	}
 	user, _, err := FindEmailUser(db, email)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {

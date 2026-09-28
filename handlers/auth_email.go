@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"tablescore-api/auth"
+	"tablescore-api/mailer"
 	"tablescore-api/middleware"
 	"tablescore-api/services"
 
@@ -38,6 +39,10 @@ func (h *Handlers) ResendVerification(c *gin.Context) {
 		ErrorJSON(c, http.StatusUnauthorized, "not authenticated")
 		return
 	}
+	if !h.Cfg.EmailEnabled() {
+		serviceError(c, mailer.ErrDisabled, "failed to send verification email")
+		return
+	}
 
 	user, err := services.GetUserByID(h.DB, id.UserID)
 	if err != nil {
@@ -57,6 +62,10 @@ func (h *Handlers) ResendVerification(c *gin.Context) {
 // The response is the same in every case; a failure is logged, not returned,
 // because a 500 would reveal that the account exists.
 func (h *Handlers) ForgotPassword(c *gin.Context) {
+	if !h.Cfg.EmailEnabled() {
+		serviceError(c, mailer.ErrDisabled, "failed to process password reset request")
+		return
+	}
 	var req ForgotPasswordRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
 		ErrorJSON(c, http.StatusBadRequest, err.Error())

@@ -53,9 +53,8 @@ auth:
     private_key: ""
 
 smtp:
-  # Leave host empty in local dev: emails are written to the log instead of sent,
-  # with the verification / reset link in the body. In production the server
-  # refuses to start without a host.
+  # Optional. Empty host disables delivery in production; local dev logs emails
+  # with the verification / reset link in the body.
   host: ""
   # Must be 1-65535; 0 (or omitted) defaults to 587.
   port: 587

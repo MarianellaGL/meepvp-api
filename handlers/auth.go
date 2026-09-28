@@ -42,8 +42,10 @@ func (h *Handlers) Register(c *gin.Context) {
 
 	// The account exists whether or not the email goes out; the user can resend
 	// from the banner, so a mail failure is logged rather than returned.
-	if err := services.SendVerificationEmail(c.Request.Context(), h.DB, h.Mailer, h.Cfg, user); err != nil {
-		slog.Error("failed to send verification email", "user_id", user.ID, "error", err)
+	if h.Cfg.EmailEnabled() {
+		if err := services.SendVerificationEmail(c.Request.Context(), h.DB, h.Mailer, h.Cfg, user); err != nil {
+			slog.Error("failed to send verification email", "user_id", user.ID, "error", err)
+		}
 	}
 
 	if err := h.issueSession(c, user); err != nil {

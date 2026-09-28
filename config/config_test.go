@@ -37,7 +37,9 @@ func TestProductionRequiresConfiguredCredentials(t *testing.T) {
 	require.Error(t, cfg.Validate())
 	cfg.Auth.JWTSecret = "0123456789abcdefghijklmnopqrstuvwxyz"
 	cfg.Server.BaseURL = "https://api.example.com"
-	require.ErrorContains(t, cfg.Validate(), "smtp.host")
+	require.NoError(t, cfg.Validate())
+	require.False(t, cfg.EmailEnabled())
 	cfg.SMTP.Host = "smtp.example.com"
 	require.NoError(t, cfg.Validate())
+	require.True(t, cfg.EmailEnabled())
 }

@@ -1,10 +1,11 @@
 // Package mailer sends transactional email. Services depend on the Mailer
 // interface; main picks an SMTP implementation when smtp.host is configured
-// and a logging one otherwise, so a fresh checkout works with no mail server.
+// and a logging one in development or a disabled one in production otherwise.
 package mailer
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -25,6 +26,13 @@ type Message struct {
 type Mailer interface {
 	Send(ctx context.Context, m Message) error
 }
+
+var ErrDisabled = errors.New("email delivery is disabled")
+
+// Disabled never sends or logs email content.
+type Disabled struct{}
+
+func (*Disabled) Send(context.Context, Message) error { return ErrDisabled }
 
 // Log writes emails to the log instead of sending them. The text body is
 // included so links (verification, password reset) can be copied from the
@@ -123,12 +131,16 @@ func (r *Recorder) Reset() {
 // smtpDialTimeout bounds one SMTP connection attempt.
 const smtpDialTimeout = 10 * time.Second
 
-// New returns the mailer main should use: SMTP when smtp.host is set, Log
-// otherwise. One log line names the choice. When smtp.host is set but the
-// mailer cannot be built, that is a startup error — never a silent fallback
+// New returns SMTP when configured, Log in development and Disabled in
+// production without SMTP. One log line names the choice. When smtp.host is set
+// but the mailer cannot be built, that is a startup error — never a silent fallback
 // to logging, which would let production emails go unsent without anyone
 // noticing.
 func New(cfg *config.Config) (Mailer, error) {
+	if !cfg.EmailEnabled() {
+		slog.Info("email delivery disabled (SMTP not configured)")
+		return &Disabled{}, nil
+	}
 	if !cfg.SMTPConfigured() {
 		slog.Info("smtp.host is empty — emails will be logged, not sent")
 		return &Log{}, nil

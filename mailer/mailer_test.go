@@ -90,3 +90,12 @@ func TestNew_InvalidPortIsAStartupErrorNotAFallback(t *testing.T) {
 	require.Error(t, err)
 	assert.Nil(t, m)
 }
+
+func TestProductionWithoutSMTPDisablesDelivery(t *testing.T) {
+	var cfg config.Config
+	cfg.Env = "production"
+	m, err := New(&cfg)
+	require.NoError(t, err)
+	require.IsType(t, &Disabled{}, m)
+	require.ErrorIs(t, m.Send(context.Background(), sample), ErrDisabled)
+}

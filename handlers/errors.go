@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 
+	"tablescore-api/mailer"
 	"tablescore-api/services"
 
 	"github.com/gin-gonic/gin"
@@ -15,6 +16,8 @@ import (
 // with fallback as the message, so no wrapped detail reaches the client.
 func serviceStatus(err error, fallback string) (int, string) {
 	switch {
+	case errors.Is(err, mailer.ErrDisabled):
+		return http.StatusServiceUnavailable, "email delivery is disabled"
 	case errors.Is(err, services.ErrUserNotFound):
 		return http.StatusNotFound, "user not found"
 	case errors.Is(err, services.ErrEmailTaken):

@@ -172,9 +172,29 @@ Sessions now return `durationSeconds`, the time actually played. Pausing stores 
 | --- | --- | --- |
 | `GET` | `/v1/bgg/collections/{username}` | Import a BGG collection; may return `202` while BGG processes it |
 | `GET` | `/v1/bgg/games/{gameID}/rules` | List the game's Rules forum discussions and links |
+| `GET` | `/v1/rulebooks` | Search EN/FR rulebooks and save catalog metadata |
+| `POST` | `/v1/rulebooks/{id}/extract` | Read a catalog PDF and propose editable scoring fields |
 | `POST` | `/v1/pdf/extract` | Extract selectable text and scoring passages from a multipart PDF |
 | `POST` | `/v1/scoring-rules/{ruleID}/pdf-imports` | Create a queued legacy import job |
 | `GET` | `/v1/pdf-imports/{id}` | Read a queued import job |
+
+`GET /v1/rulebooks?query=Catan&language=en` searches rule-book.org and stores
+catalog metadata in PostgreSQL. English and French are supported by the source;
+this endpoint does not need a BGG token. Omitting `query` lists saved metadata.
+Migration 00003 seeds the English base rulebooks for Catan and Everdell. When the
+provider fails, matching saved records are returned with `cached: true`; a search
+without saved matches returns 502. Searches are limited to 20/minute/IP.
+
+`POST /v1/rulebooks/{id}/extract` downloads the selected catalog PDF, extracts its
+text and returns the normal PDF response plus `rulebook` metadata. Downloads are
+limited to allowlisted HTTPS PDFs on cdn.1j1ju.com, 20 MB and 100 pages; redirects
+outside that source are rejected. Extraction is limited to 3/minute/IP. PDFs and
+extracted text are not retained by the server. The mobile reader keeps a local
+copy and opens the scoring editor for review. Creating a sheet can include
+`rulebookId`; the API verifies that catalog record exists and retains the source
+ID in the sheet. Reviewed suggestions cover the English base Catan/Everdell
+rulebooks; other games use printed tables or manual configuration. The catalog
+does not infer arbitrary game rules or grant rights to republish source PDFs.
 
 `POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. The legacy PDF import route has no worker yet, so its jobs stay queued. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
 

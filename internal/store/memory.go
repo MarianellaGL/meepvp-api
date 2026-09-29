@@ -21,6 +21,7 @@ var (
 
 type MemoryStore struct {
 	mu           sync.RWMutex
+	rulebooks    map[string]domain.Rulebook
 	tables       map[string]domain.Table
 	rules        map[string]domain.ScoringRule
 	sessions     map[string]domain.ScoreSession
@@ -45,7 +46,8 @@ type memoryBoardPhoto struct {
 
 func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
-		tables: map[string]domain.Table{}, rules: map[string]domain.ScoringRule{},
+		rulebooks: map[string]domain.Rulebook{},
+		tables:    map[string]domain.Table{}, rules: map[string]domain.ScoringRule{},
 		sessions: map[string]domain.ScoreSession{}, boardPhotos: map[string]memoryBoardPhoto{}, imports: map[string]domain.PDFImport{}, plans: map[string]domain.ScheduledGame{},
 		users: map[string]domain.User{}, passwords: map[string]string{}, authSessions: map[string]memoryAuthSession{}, userSessions: map[string]map[string]string{},
 	}

@@ -25,6 +25,7 @@ type ScoreField struct {
 }
 
 type ScoringRule struct {
+	RulebookID   string       `json:"rulebookId,omitempty"`
 	ID           string       `json:"id"`
 	BGGID        int          `json:"bggId,omitempty"`
 	GameName     string       `json:"gameName"`
@@ -33,6 +34,19 @@ type ScoringRule struct {
 	Fields       []ScoreField `json:"fields"`
 	IsPublic     bool         `json:"isPublic"`
 	CreatedAt    time.Time    `json:"createdAt"`
+}
+
+// Rulebook stores catalog metadata; PDFs remain at their source URL.
+type Rulebook struct {
+	ID        string    `json:"id" gorm:"primaryKey"`
+	Source    string    `json:"source"`
+	SourceID  string    `json:"sourceId"`
+	Name      string    `json:"name"`
+	Language  string    `json:"language"`
+	Edition   string    `json:"edition,omitempty"`
+	PDFURL    string    `json:"pdfUrl"`
+	CreatedAt time.Time `json:"createdAt"`
+	UpdatedAt time.Time `json:"updatedAt"`
 }
 
 type Table struct {

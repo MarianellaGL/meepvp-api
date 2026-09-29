@@ -2627,6 +2627,103 @@
         },
         "description": "Abrir ws:// o wss:// del mismo host (Swagger no abre sockets). Acepta conexión anónima; un JWT válido identifica al usuario. Enviar {\"type\":\"room.join\",\"payload\":{\"room\":\"session:<id>\"}}. query.invalidate indica que hay que volver a consultar la partida por HTTP. En producción se valida Origin contra SERVER_BASE_URL."
       }
+    },
+    "/v1/rulebooks": {
+      "get": {
+        "operationId": "get_v1_rulebooks",
+        "tags": [
+          "PDF"
+        ],
+        "summary": "Buscar reglamentos en el catálogo",
+        "description": "EN/FR. Sin query devuelve el catálogo guardado. Con query consulta rule-book.org y guarda metadatos; usa la copia local si el proveedor falla. Límite 20 consultas/minuto por IP.",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "maxLength": 100
+            }
+          },
+          {
+            "name": "language",
+            "in": "query",
+            "schema": {
+              "type": "string",
+              "enum": [
+                "en",
+                "fr"
+              ],
+              "default": "en"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulebookSearch"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/rulebooks/{id}/extract": {
+      "post": {
+        "operationId": "post_v1_rulebooks_id_extract",
+        "tags": [
+          "PDF"
+        ],
+        "summary": "Leer un reglamento del catálogo",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulebookExtraction"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "description": "Descarga un PDF permitido del catálogo y devuelve texto, propuesta editable y fuente. Máximo 20 MB y 100 páginas; límite 3 solicitudes/minuto por IP. No guarda una planilla automáticamente.",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "example": "rule-book:en:catan"
+          }
+        ]
+      }
     }
   },
   "components": {
@@ -2687,6 +2784,10 @@
           "createdAt": {
             "type": "string",
             "format": "date-time"
+          },
+          "rulebookId": {
+            "type": "string",
+            "description": "Optional existing catalog ID retained as the scoring template source."
           }
         }
       },
@@ -3525,6 +3626,10 @@
           },
           "isPublic": {
             "type": "boolean"
+          },
+          "rulebookId": {
+            "type": "string",
+            "description": "Optional existing catalog ID retained as the scoring template source."
           }
         },
         "required": [
@@ -3591,6 +3696,91 @@
         "required": [
           "username",
           "password"
+        ]
+      },
+      "Rulebook": {
+        "type": "object",
+        "required": [
+          "id",
+          "source",
+          "sourceId",
+          "name",
+          "language",
+          "pdfUrl",
+          "createdAt",
+          "updatedAt"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "source": {
+            "type": "string"
+          },
+          "sourceId": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "edition": {
+            "type": "string"
+          },
+          "pdfUrl": {
+            "type": "string"
+          },
+          "language": {
+            "type": "string",
+            "enum": [
+              "en",
+              "fr"
+            ]
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RulebookSearch": {
+        "type": "object",
+        "required": [
+          "results",
+          "cached"
+        ],
+        "properties": {
+          "results": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Rulebook"
+            }
+          },
+          "cached": {
+            "type": "boolean",
+            "description": "True when the external provider failed and saved metadata was used."
+          }
+        }
+      },
+      "RulebookExtraction": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Result"
+          },
+          {
+            "type": "object",
+            "required": [
+              "rulebook"
+            ],
+            "properties": {
+              "rulebook": {
+                "$ref": "#/components/schemas/Rulebook"
+              }
+            }
+          }
         ]
       }
     },

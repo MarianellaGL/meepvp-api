@@ -15,6 +15,7 @@ import (
 	"tablescore-api/internal/bgg"
 	"tablescore-api/internal/domain"
 	"tablescore-api/internal/pdfreader"
+	"tablescore-api/internal/rulebooks"
 	"tablescore-api/internal/store"
 )
 
@@ -22,6 +23,7 @@ type API struct {
 	foundation *handlers.Deps
 	store      store.Repository
 	bgg        *bgg.Client
+	rulebooks  *rulebooks.Client
 }
 
 type playerTotal struct {
@@ -41,7 +43,7 @@ func New(s store.Repository, clients ...*bgg.Client) *API {
 	if len(clients) > 0 && clients[0] != nil {
 		client = clients[0]
 	}
-	return &API{store: s, bgg: client}
+	return &API{store: s, bgg: client, rulebooks: rulebooks.New()}
 }
 
 func (a *API) extractPDF(w http.ResponseWriter, r *http.Request) {
@@ -172,6 +174,12 @@ func (a *API) createRule(w http.ResponseWriter, r *http.Request) {
 	var input domain.ScoringRule
 	if !decodeJSON(w, r, &input) {
 		return
+	}
+	if input.RulebookID != "" {
+		if _, err := a.store.GetRulebook(input.RulebookID); err != nil {
+			writeStoreError(w, err)
+			return
+		}
 	}
 	if input.IsPublic {
 		if _, ok := a.requireUser(w, r); !ok {

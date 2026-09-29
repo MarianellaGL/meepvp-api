@@ -56,5 +56,24 @@ func suggestScoring(text string) *ScoringSuggestion {
 			"Gana quien alcanza 10 puntos durante su propio turno. La app suma puntos, pero no controla turnos ni finaliza automáticamente: confirmá el ganador en la mesa.",
 		}}
 	}
+	// The base-game cover and the full scoring section distinguish this from
+	// Automa, appendices and expansions that may quote the same categories.
+	if strings.HasPrefix(normalized, "wingspan a competitive bird-collection, engine-building game for 1-5 players") &&
+		hasAll("game end and scoring", "points for each bird card", "points for each bonus card", "points for end-of-round goals", "1 point for each:", "egg on a bird card", "food token cached on a bird card", "card tucked under a bird card", "most unused food tokens wins") {
+		return &ScoringSuggestion{GameName: "Wingspan", Fields: []SuggestedField{
+			{Name: "Aves: puntos impresos", Kind: domain.FieldKindManual},
+			{Name: "Cartas de bonificación", Kind: domain.FieldKindManual},
+			{Name: "Objetivos de fin de ronda", Kind: domain.FieldKindManual},
+			{Name: "Huevos sobre aves", Kind: domain.FieldKindCounter, PointsPerUnit: 1},
+			{Name: "Alimento almacenado sobre aves", Kind: domain.FieldKindCounter, PointsPerUnit: 1},
+			{Name: "Cartas debajo de aves", Kind: domain.FieldKindCounter, PointsPerUnit: 1},
+		}, Notes: []string{
+			"Propuesta para Wingspan base multijugador en inglés. Revisá los campos; no incluye Automa, expansiones ni el modo Dúo.",
+			"En aves y bonificaciones ingresá la suma de puntos impresos o conseguidos, no la cantidad de cartas.",
+			"Ingresá el total de puntos de los cuatro objetivos de ronda según el lado del tablero elegido. En el lado competitivo, los empates reparten los puestos ocupados y redondean hacia abajo; la app no calcula esa distribución.",
+			"Contá solo huevos y alimento sobre las aves, y cartas debajo de ellas. El alimento de tu reserva y las cartas en mano no suman puntos por sí mismos.",
+			"La partida termina después de la cuarta ronda. Gana el mayor total; si empatan, gana quien tenga más alimento sin usar. Si persiste el empate, comparten la victoria. La app muestra el empate por puntos y no automatiza ese desempate.",
+		}}
+	}
 	return nil
 }

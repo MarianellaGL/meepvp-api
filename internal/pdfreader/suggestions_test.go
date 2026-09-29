@@ -56,3 +56,32 @@ func TestSubprocessOutputLimit(t *testing.T) {
 		t.Fatal("must not retain oversized output")
 	}
 }
+
+func TestWingspanBaseSuggestionAndVariantRejection(t *testing.T) {
+	text := "WINGSPAN a competitive bird-collection, engine-building game for 1-5 players\nGame End and Scoring\nPoints for each bird card\nPoints for each bonus card\nPoints for end-of-round goals\n1 point for each:\negg on a bird card\nfood token cached on a bird card\ncard tucked under a bird card\nThe player with the most unused food tokens wins"
+	s := suggestScoring(text)
+	if s == nil || s.GameName != "Wingspan" || len(s.Fields) != 6 {
+		t.Fatalf("unexpected Wingspan suggestion: %+v", s)
+	}
+	for i, field := range s.Fields {
+		if i < 3 && (field.Kind != domain.FieldKindManual || field.PointsPerUnit != 0) {
+			t.Fatal("bird/bonus/goal card counts must not become points")
+		}
+		if i >= 3 && (field.Kind != domain.FieldKindCounter || field.PointsPerUnit != 1) {
+			t.Fatal("each scored egg, cached food and tucked card must count once")
+		}
+	}
+	if len(s.Notes) < 5 {
+		t.Fatal("scoring and tiebreak limitations must be available for review")
+	}
+	for _, title := range []string{"WINGSPAN AUTOMA", "WINGSPAN OCEANIA EXPANSION", "WINGSPAN ASIA", "WINGSPAN APPENDIX", "WINGSPAN POCKET"} {
+		if suggestScoring(strings.Replace(text, "WINGSPAN", title, 1)) != nil {
+			t.Fatalf("must not apply base scoring to %s", title)
+		}
+	}
+	for _, invalid := range []string{"Wingspan rules", strings.Replace(text, "1 point for each:", "2 points for each:", 1), strings.Replace(text, "food token cached on a bird card", "food token in your supply", 1)} {
+		if suggestScoring(invalid) != nil {
+			t.Fatal("unverified scoring must remain manual")
+		}
+	}
+}

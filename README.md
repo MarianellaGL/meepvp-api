@@ -192,7 +192,7 @@ outside that source are rejected. Extraction is limited to 3/minute/IP. PDFs and
 extracted text are not retained by the server. The mobile reader keeps a local
 copy and opens the scoring editor for review. Creating a sheet can include
 `rulebookId`; the API verifies that catalog record exists and retains the source
-ID in the sheet. Reviewed suggestions cover the English base Catan/Everdell
+ID in the sheet. Reviewed suggestions cover the English base Catan/Everdell/Wingspan
 rulebooks; other games use printed tables or manual configuration. The catalog
 does not infer arbitrary game rules or grant rights to republish source PDFs.
 
@@ -209,3 +209,20 @@ Validate a downloaded rulebook with `TABLESCORE_TEST_PDF=/path/to/rulebook.pdf g
 ## Current limits
 
 `GET /v1/scoring-rules` currently lists **all** sheets to unauthenticated callers, including sheets omitted from community search. `isPublic: false` means unlisted, not private. Do not store confidential material in scoring sheets. Authentication protects account statistics, while anonymous tables and session IDs retain their existing access model. Foundation provides email verification and password recovery for email accounts. Publication moderation remains application-specific. Existing username-only mobile accounts do not have an email address to use for recovery.
+
+### Wingspan base
+
+Migration 00004 adds the English Wingspan rulebook to the saved catalog. The
+reviewed import requires both its base-game cover and the full scoring section;
+Automa, appendices and expansion covers do not select this template. Its six
+fields match the scorepad: bird points, bonus points and round-goal points are
+manual totals; eggs, cached food and tucked cards are counters worth one each.
+Unused food and cards in hand do not score automatically. Notes explain the
+four-round finish, manual round-goal tie allocation and unused-food tiebreaker.
+The API still returns point ties rather than calculating that tiebreaker.
+Source: [official Wingspan reference](https://wingspan.rulepop.com/).
+
+## Product backlog
+
+See [PRODUCT_BACKLOG.md](PRODUCT_BACKLOG.md) for planned score cancellations and
+duel mechanics, including data consistency and victory conditions.

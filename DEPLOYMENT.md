@@ -75,6 +75,6 @@ Deploy the latest API commit before using **Biblioteca → Buscar reglamentos**
 in the mobile app. Startup applies additive migration 00003, which creates
 `rulebooks` and seeds Catan/Everdell English base metadata. Existing game and
 account data is preserved. No new environment variables or database credentials
-are needed. Verify `GET /v1/rulebooks` returns those two records, then select a
-PDF and review its scoring fields in the app before saving. The provider supports
+are needed. Migration 00004 also seeds Wingspan base. Verify
+`GET /v1/rulebooks` returns all three records, then select a PDF and review its scoring fields in the app before saving. The provider supports
 EN/FR; BGG integration remains separate and requires its own token.

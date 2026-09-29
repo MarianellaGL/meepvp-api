@@ -61,6 +61,11 @@ func TestExtractProvidedPDF(t *testing.T) {
 		}
 		t.Logf("scoring suggestion: %s (%d fields)", result.Suggestion.GameName, len(result.Suggestion.Fields))
 	}
+	if strings.Contains(fileName, "wingspan") {
+		if result.Suggestion == nil || result.Suggestion.GameName != "Wingspan" || len(result.Suggestion.Fields) != 6 {
+			t.Fatal("expected six reviewed fields from the real Wingspan base PDF")
+		}
+	}
 }
 
 func testPDF(line string) []byte {

@@ -43,7 +43,10 @@ func TestRulebookMigrationAndPostgresPersistence(t *testing.T) {
 	require.NoError(t, err)
 	books, err := repo.FindRulebooks("", "en")
 	require.NoError(t, err)
-	require.Len(t, books, 2)
+	require.Len(t, books, 3)
+	wingspan, err := repo.GetRulebook("rule-book:en:wingspan")
+	require.NoError(t, err)
+	require.Equal(t, "Base game", wingspan.Edition)
 	catan, err := repo.GetRulebook("rule-book:en:catan")
 	require.NoError(t, err)
 	changed := catan

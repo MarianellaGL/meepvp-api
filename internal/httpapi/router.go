@@ -2,6 +2,7 @@ package httpapi
 
 import (
 	"net/http"
+	"tablescore-api/docs"
 	"tablescore-api/handlers"
 	"time"
 
@@ -16,6 +17,7 @@ func (a *API) Handler() http.Handler {
 	}
 	// Gin's default trusts all proxies, matching the deployment's proxy setup.
 	r.Use(requestID(), requestLogger(), recovery(), cors())
+	docs.Mount(r)
 	r.NoRoute(func(c *gin.Context) { writeError(c.Writer, http.StatusNotFound, "route not found") })
 	r.GET("/health", func(c *gin.Context) {
 		writeJSON(c.Writer, http.StatusOK, map[string]string{"status": "ok"})

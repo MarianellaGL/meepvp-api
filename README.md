@@ -17,6 +17,22 @@ The server sets header, read, write and idle timeouts, allowing up to three
 minutes for responses including PDF extraction. SIGINT and SIGTERM drain
 in-flight requests for up to ten seconds before closing the database.
 
+## API documentation
+
+Open `/docs` on the running API for Swagger UI (for example,
+`http://localhost:8080/docs`). The OpenAPI 3.0.3 contract is served at
+`/openapi.json` and maintained in [docs/openapi.json](docs/openapi.json).
+Both are embedded in the Go binary and available in the production image.
+Swagger UI loads its pinned JavaScript/CSS from unpkg.
+
+Use **Authorize** for the bearer token returned by `/v1/auth/login` or for the
+table's `hostToken` as `X-Table-Token`. Foundation `/api/auth/login` sets HttpOnly
+cookies and returns a user, not a token; same-origin requests from `/docs` use
+those cookies. Foundation endpoints require JWT/cookie auth, not a legacy `/v1`
+token. Swagger can upload PDFs and board images. WebSockets are described but
+must be opened with a WebSocket client. **Try it out** uses the current server
+and can change real data.
+
 ## Foundation backend
 
 The backend adopts [Foundation](FOUNDATION.md): Gin, GORM/PostgreSQL, cleanenv,

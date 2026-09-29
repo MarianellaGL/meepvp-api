@@ -1,0 +1,3627 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "MeppVP API",
+    "version": "0.1.0",
+    "description": "API Go de partidas y puntuación. /v1 mantiene la app móvil; /api agrega autenticación Foundation y administración. Usá Authorize para Bearer o X-Table-Token. Las pruebas modifican datos reales del servidor seleccionado."
+  },
+  "servers": [
+    {
+      "url": "/",
+      "description": "Servidor actual"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "get_health",
+        "tags": [
+          "Sistema"
+        ],
+        "summary": "Estado de la API",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/auth/signup": {
+      "post": {
+        "operationId": "post_v1_auth_signup",
+        "tags": [
+          "Cuentas móviles"
+        ],
+        "summary": "Crear cuenta",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyCredentials"
+              }
+            }
+          }
+        },
+        "description": "Devuelve user y token. Usar token como Bearer en /v1. Signup exige contraseña de 12–1024 bytes; login admite contraseñas existentes."
+      }
+    },
+    "/v1/auth/login": {
+      "post": {
+        "operationId": "post_v1_auth_login",
+        "tags": [
+          "Cuentas móviles"
+        ],
+        "summary": "Iniciar sesión",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AuthSession"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LegacyLogin"
+              }
+            }
+          }
+        },
+        "description": "Devuelve user y token. Usar token como Bearer en /v1. Signup exige contraseña de 12–1024 bytes; login admite contraseñas existentes."
+      }
+    },
+    "/v1/auth/logout": {
+      "post": {
+        "operationId": "post_v1_auth_logout",
+        "tags": [
+          "Cuentas móviles"
+        ],
+        "summary": "Cerrar sesión",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "LegacyBearer": []
+          },
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/me": {
+      "get": {
+        "operationId": "get_v1_me",
+        "tags": [
+          "Cuentas móviles"
+        ],
+        "summary": "Consultar me",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "LegacyBearer": []
+          },
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/me/sessions": {
+      "get": {
+        "operationId": "get_v1_me_sessions",
+        "tags": [
+          "Cuentas móviles"
+        ],
+        "summary": "Consultar me/sessions",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/MySession"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "LegacyBearer": []
+          },
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/me/stats": {
+      "get": {
+        "operationId": "get_v1_me_stats",
+        "tags": [
+          "Cuentas móviles"
+        ],
+        "summary": "Consultar me/stats",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Stats"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "LegacyBearer": []
+          },
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/me/claim-session": {
+      "post": {
+        "operationId": "post_v1_me_claim_session",
+        "tags": [
+          "Cuentas móviles"
+        ],
+        "summary": "Vincular partida anterior a mi cuenta",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Status"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionId": {
+                    "type": "string"
+                  },
+                  "playerId": {
+                    "type": "string"
+                  },
+                  "hostToken": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "sessionId",
+                  "playerId",
+                  "hostToken"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "LegacyBearer": []
+          },
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ]
+      }
+    },
+    "/v1/tables": {
+      "post": {
+        "operationId": "post_v1_tables",
+        "tags": [
+          "Mesas"
+        ],
+        "summary": "Crear mesa y obtener token de anfitrión",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CreatedTable"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/tables/{code}/current-session": {
+      "get": {
+        "operationId": "get_v1_tables_code_current_session",
+        "tags": [
+          "Mesas"
+        ],
+        "summary": "Obtener partida activa o pausada",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/tables/{code}/sessions": {
+      "post": {
+        "operationId": "post_v1_tables_code_sessions",
+        "tags": [
+          "Mesas"
+        ],
+        "summary": "Crear partida",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ruleId": {
+                    "type": "string"
+                  },
+                  "players": {
+                    "type": "array",
+                    "items": {
+                      "$ref": "#/components/schemas/Player"
+                    }
+                  }
+                },
+                "required": [
+                  "ruleId",
+                  "players"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "TableToken": []
+          }
+        ],
+        "description": "X-Table-Token requerido. Bearer opcional: vincula al usuario con el primer jugador."
+      }
+    },
+    "/v1/tables/{code}/scheduled-games": {
+      "get": {
+        "operationId": "get_v1_tables_code_scheduled_games",
+        "tags": [
+          "Agenda"
+        ],
+        "summary": "Listar juegos programados",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScheduledGame"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_tables_code_scheduled_games",
+        "tags": [
+          "Agenda"
+        ],
+        "summary": "Programar juego",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledGame"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "code",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ScheduledGameInput"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
+      }
+    },
+    "/v1/scheduled-games/{id}/rule": {
+      "patch": {
+        "operationId": "patch_v1_scheduled_games_id_rule",
+        "tags": [
+          "Agenda"
+        ],
+        "summary": "Asignar rule a juego programado",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledGame"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ruleId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "ruleId"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
+      }
+    },
+    "/v1/scheduled-games/{id}/session": {
+      "patch": {
+        "operationId": "patch_v1_scheduled_games_id_session",
+        "tags": [
+          "Agenda"
+        ],
+        "summary": "Asignar session a juego programado",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScheduledGame"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "sessionId": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "sessionId"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
+      }
+    },
+    "/v1/scoring-rules": {
+      "get": {
+        "operationId": "get_v1_scoring_rules",
+        "tags": [
+          "Planillas"
+        ],
+        "summary": "Listar planillas",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScoringRule"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "operationId": "post_v1_scoring_rules",
+        "tags": [
+          "Planillas"
+        ],
+        "summary": "Crear planilla",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ScoringRule"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RuleInput"
+              }
+            }
+          }
+        },
+        "description": "Crear planillas privadas no requiere cuenta. isPublic=true requiere Bearer válido. winCondition omitido usa highest_total."
+      }
+    },
+    "/v1/community/scoring-rules": {
+      "get": {
+        "operationId": "get_v1_community_scoring_rules",
+        "tags": [
+          "Planillas"
+        ],
+        "summary": "Buscar planillas públicas",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ScoringRule"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "bggId",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{id}": {
+      "get": {
+        "operationId": "get_v1_sessions_id",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Leer partida, totales y ganadores",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{id}/players": {
+      "post": {
+        "operationId": "post_v1_sessions_id_players",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Agregar jugador",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "name": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "name"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{id}/scores": {
+      "put": {
+        "operationId": "put_v1_sessions_id_scores",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Reemplazar valores de puntuación",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "values": {
+                    "type": "object",
+                    "additionalProperties": {
+                      "type": "object",
+                      "additionalProperties": {
+                        "type": "integer"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "values"
+                ]
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "operationId": "patch_v1_sessions_id_scores",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Cambiar un campo de un jugador",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "playerId": {
+                    "type": "string"
+                  },
+                  "fieldId": {
+                    "type": "string"
+                  },
+                  "value": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "playerId",
+                  "fieldId",
+                  "value"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{id}/points": {
+      "post": {
+        "operationId": "post_v1_sessions_id_points",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Sumar o restar puntos directos",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "playerId": {
+                    "type": "string"
+                  },
+                  "delta": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "playerId",
+                  "delta"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/v1/sessions/{id}/finish": {
+      "post": {
+        "operationId": "post_v1_sessions_id_finish",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Finalizar partida",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{id}/pause": {
+      "post": {
+        "operationId": "post_v1_sessions_id_pause",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Pausar partida",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{id}/resume": {
+      "post": {
+        "operationId": "post_v1_sessions_id_resume",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Reanudar partida",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{id}/reopen": {
+      "post": {
+        "operationId": "post_v1_sessions_id_reopen",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Reabrir partida",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
+      }
+    },
+    "/v1/sessions/{id}/board-photo": {
+      "get": {
+        "operationId": "get_v1_sessions_id_board_photo",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Descargar foto del tablero",
+        "responses": {
+          "200": {
+            "description": "Imagen binaria",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/png": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              },
+              "image/webp": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "post_v1_sessions_id_board_photo",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Subir foto del tablero",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "TableToken": []
+          }
+        ],
+        "description": "JPEG, PNG o WebP; máximo 5 MB. Reemplaza la foto anterior."
+      }
+    },
+    "/v1/pdf/extract": {
+      "post": {
+        "operationId": "post_v1_pdf_extract",
+        "tags": [
+          "PDF"
+        ],
+        "summary": "Extraer texto y propuesta de puntuación de PDF",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Result"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "description": "Máximo 20 MB y 100 páginas. Incluye OCR cuando está disponible. Revisar scoringSuggestion antes de guardar."
+      }
+    },
+    "/v1/scoring-rules/{id}/pdf-imports": {
+      "post": {
+        "operationId": "post_v1_scoring_rules_id_pdf_imports",
+        "tags": [
+          "PDF"
+        ],
+        "summary": "Registrar importación de PDF",
+        "responses": {
+          "202": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PDFImport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": {
+                    "type": "string",
+                    "format": "binary"
+                  }
+                },
+                "required": [
+                  "file"
+                ]
+              }
+            }
+          }
+        },
+        "description": "Registra metadatos con estado queued; este endpoint no procesa el PDF. Para extraer contenido usar /v1/pdf/extract."
+      }
+    },
+    "/v1/pdf-imports/{id}": {
+      "get": {
+        "operationId": "get_v1_pdf_imports_id",
+        "tags": [
+          "PDF"
+        ],
+        "summary": "Consultar importación registrada",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PDFImport"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/bgg/collections/{username}": {
+      "get": {
+        "operationId": "get_v1_bgg_collections_username",
+        "tags": [
+          "BoardGameGeek"
+        ],
+        "summary": "Consultar colección BGG",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "BGG está procesando la consulta; reintentar según retryAfterSeconds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/CollectionResult"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "username",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/v1/bgg/games/{id}/rules": {
+      "get": {
+        "operationId": "get_v1_bgg_games_id_rules",
+        "tags": [
+          "BoardGameGeek"
+        ],
+        "summary": "Consultar foro de reglas BGG",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesResult"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "BGG está procesando la consulta; reintentar según retryAfterSeconds",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RulesResult"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ]
+      }
+    },
+    "/api/auth/register": {
+      "post": {
+        "operationId": "post_api_auth_register",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "register",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegisterRequest"
+              }
+            }
+          }
+        },
+        "description": "Auth Foundation usa cookies HttpOnly access_token y refresh_token; no devuelve el JWT en el JSON. Contraseñas nuevas: mínimo 12 caracteres con mayúscula, minúscula, número y símbolo."
+      }
+    },
+    "/api/auth/login": {
+      "post": {
+        "operationId": "post_api_auth_login",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "login",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/LoginRequest"
+              }
+            }
+          }
+        },
+        "description": "Auth Foundation usa cookies HttpOnly access_token y refresh_token; no devuelve el JWT en el JSON. Contraseñas nuevas: mínimo 12 caracteres con mayúscula, minúscula, número y símbolo."
+      }
+    },
+    "/api/auth/verify-email": {
+      "post": {
+        "operationId": "post_api_auth_verify_email",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "verify-email",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/VerifyEmailRequest"
+              }
+            }
+          }
+        },
+        "description": "Auth Foundation usa cookies HttpOnly access_token y refresh_token; no devuelve el JWT en el JSON. Contraseñas nuevas: mínimo 12 caracteres con mayúscula, minúscula, número y símbolo."
+      }
+    },
+    "/api/auth/forgot-password": {
+      "post": {
+        "operationId": "post_api_auth_forgot_password",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "forgot-password",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Envío de correo deshabilitado en producción sin SMTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ForgotPasswordRequest"
+              }
+            }
+          }
+        },
+        "description": "Auth Foundation usa cookies HttpOnly access_token y refresh_token; no devuelve el JWT en el JSON. Contraseñas nuevas: mínimo 12 caracteres con mayúscula, minúscula, número y símbolo."
+      }
+    },
+    "/api/auth/reset-password": {
+      "post": {
+        "operationId": "post_api_auth_reset_password",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "reset-password",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ResetPasswordRequest"
+              }
+            }
+          }
+        },
+        "description": "Auth Foundation usa cookies HttpOnly access_token y refresh_token; no devuelve el JWT en el JSON. Contraseñas nuevas: mínimo 12 caracteres con mayúscula, minúscula, número y símbolo."
+      }
+    },
+    "/api/auth/refresh": {
+      "post": {
+        "operationId": "post_api_auth_refresh",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Rotar tokens de sesión",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "RefreshCookie": []
+          }
+        ]
+      }
+    },
+    "/api/auth/logout": {
+      "post": {
+        "operationId": "post_api_auth_logout",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Revocar refresh token y borrar cookies",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/auth/me": {
+      "get": {
+        "operationId": "get_api_auth_me",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Consultar usuario autenticado",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ]
+      }
+    },
+    "/api/auth/resend-verification": {
+      "post": {
+        "operationId": "post_api_auth_resend_verification",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Reenviar verificación de email",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Envío de correo deshabilitado en producción sin SMTP",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ]
+      }
+    },
+    "/api/auth/{provider}": {
+      "get": {
+        "operationId": "get_api_auth_provider",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Iniciar OAuth",
+        "responses": {
+          "307": {
+            "description": "Redirección OAuth (inicio)"
+          },
+          "302": {
+            "description": "Redirección al completar OAuth"
+          },
+          "default": {
+            "description": "OAuth no configurado o autenticación inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google",
+                "github",
+                "apple"
+              ]
+            }
+          }
+        ],
+        "description": "Proveedor configurado: google, github o apple. Flujo de navegador con redirecciones y cookies."
+      }
+    },
+    "/api/auth/{provider}/callback": {
+      "get": {
+        "operationId": "get_api_auth_provider_callback",
+        "tags": [
+          "Autenticación"
+        ],
+        "summary": "Callback OAuth",
+        "responses": {
+          "307": {
+            "description": "Redirección OAuth (inicio)"
+          },
+          "302": {
+            "description": "Redirección al completar OAuth"
+          },
+          "default": {
+            "description": "OAuth no configurado o autenticación inválida",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "provider",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": [
+                "google",
+                "github",
+                "apple"
+              ]
+            }
+          }
+        ],
+        "description": "Proveedor configurado: google, github o apple. Flujo de navegador con redirecciones y cookies."
+      }
+    },
+    "/api/settings": {
+      "get": {
+        "operationId": "get_api_settings",
+        "tags": [
+          "Configuración"
+        ],
+        "summary": "Consultar configuración pública",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/SettingResponse"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/admin/users": {
+      "get": {
+        "operationId": "get_api_admin_users",
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Listar usuarios (admin)",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/PaginatedUsersResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "per_page",
+            "in": "query",
+            "schema": {
+              "type": "integer"
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ],
+        "description": "Requiere rol admin. per_page máximo 100; valor por defecto 20."
+      },
+      "post": {
+        "operationId": "post_api_admin_users",
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Crear usuario (admin)",
+        "responses": {
+          "201": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUserRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ],
+        "description": "Requiere rol admin."
+      }
+    },
+    "/api/admin/users/{id}": {
+      "patch": {
+        "operationId": "patch_api_admin_users_id",
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Editar usuario (admin)",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ],
+        "description": "Requiere rol admin."
+      },
+      "delete": {
+        "operationId": "delete_api_admin_users_id",
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Eliminar usuario (admin)",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ],
+        "description": "Requiere rol admin. No permite eliminarse a sí mismo."
+      }
+    },
+    "/api/admin/users/{id}/role": {
+      "patch": {
+        "operationId": "patch_api_admin_users_id_role",
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Cambiar rol (admin)",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MessageResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUserRoleRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ],
+        "description": "Requiere rol admin."
+      }
+    },
+    "/api/admin/settings/{key}": {
+      "put": {
+        "operationId": "put_api_admin_settings_key",
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Editar configuración (admin)",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SettingResponse"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "key",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateSettingRequest"
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ],
+        "description": "Requiere rol admin."
+      }
+    },
+    "/api/admin/ws/connections": {
+      "get": {
+        "operationId": "get_api_admin_ws_connections",
+        "tags": [
+          "Administración"
+        ],
+        "summary": "Listar conexiones WebSocket (admin)",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/ClientInfo"
+                  }
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "JWTBearer": []
+          },
+          {
+            "AccessCookie": []
+          }
+        ],
+        "description": "Requiere rol admin."
+      }
+    },
+    "/ws": {
+      "get": {
+        "operationId": "get_ws",
+        "tags": [
+          "Tiempo real"
+        ],
+        "summary": "Conectar WebSocket",
+        "responses": {
+          "101": {
+            "description": "WebSocket conectado"
+          },
+          "400": {
+            "description": "Solicitud sin upgrade WebSocket válido"
+          }
+        },
+        "description": "Abrir ws:// o wss:// del mismo host (Swagger no abre sockets). Acepta conexión anónima; un JWT válido identifica al usuario. Enviar {\"type\":\"room.join\",\"payload\":{\"room\":\"session:<id>\"}}. query.invalidate indica que hay que volver a consultar la partida por HTTP. En producción se valida Origin contra SERVER_BASE_URL."
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ScoreField": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "checkbox",
+              "counter",
+              "manual"
+            ]
+          },
+          "pointsPerUnit": {
+            "type": "integer"
+          }
+        }
+      },
+      "ScoringRule": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "bggId": {
+            "type": "integer"
+          },
+          "gameName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "winCondition": {
+            "type": "string",
+            "enum": [
+              "highest_total",
+              "lowest_total"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScoreField"
+            }
+          },
+          "isPublic": {
+            "type": "boolean"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Table": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "Player": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "ScoreSession": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tableCode": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Player"
+            }
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            }
+          },
+          "manualPoints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "playedSeconds": {
+            "type": "integer"
+          },
+          "runningSince": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pausedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "boardPhotoUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastModified": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PDFImport": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "fileName": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "ScheduledGame": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tableCode": {
+            "type": "string"
+          },
+          "gameName": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "username": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "RegisterRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password"
+        ]
+      },
+      "LoginRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "email",
+          "password"
+        ]
+      },
+      "CreateUserRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "user"
+            ]
+          }
+        },
+        "required": [
+          "email",
+          "name",
+          "password",
+          "role"
+        ]
+      },
+      "UpdateUserRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "name": {
+            "type": "string"
+          }
+        }
+      },
+      "UpdateUserRoleRequest": {
+        "type": "object",
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "admin",
+              "user"
+            ]
+          }
+        },
+        "required": [
+          "role"
+        ]
+      },
+      "UpdateSettingRequest": {
+        "type": "object",
+        "properties": {
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "value"
+        ]
+      },
+      "VerifyEmailRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token"
+        ]
+      },
+      "ForgotPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "email": {
+            "type": "string",
+            "format": "email"
+          }
+        },
+        "required": [
+          "email"
+        ]
+      },
+      "ResetPasswordRequest": {
+        "type": "object",
+        "properties": {
+          "token": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "token",
+          "password"
+        ]
+      },
+      "UserResponse": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "role": {
+            "type": "string"
+          },
+          "email_verified": {
+            "type": "boolean"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        }
+      },
+      "PaginatedUsersResponse": {
+        "type": "object",
+        "properties": {
+          "data": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserResponse"
+            }
+          },
+          "total": {
+            "type": "integer"
+          },
+          "page": {
+            "type": "integer"
+          },
+          "per_page": {
+            "type": "integer"
+          },
+          "total_pages": {
+            "type": "integer"
+          }
+        }
+      },
+      "SettingResponse": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "key": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "value": {
+            "type": "string"
+          }
+        }
+      },
+      "MessageResponse": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "ErrorResponse": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        }
+      },
+      "CollectionGame": {
+        "type": "object",
+        "properties": {
+          "bggId": {
+            "type": "integer"
+          },
+          "name": {
+            "type": "string"
+          },
+          "yearPublished": {
+            "type": "integer"
+          },
+          "thumbnailUrl": {
+            "type": "string"
+          },
+          "imageUrl": {
+            "type": "string"
+          },
+          "minPlayers": {
+            "type": "integer"
+          },
+          "maxPlayers": {
+            "type": "integer"
+          },
+          "playingTime": {
+            "type": "integer"
+          }
+        }
+      },
+      "CollectionResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "type": "integer"
+          },
+          "games": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/CollectionGame"
+            }
+          }
+        }
+      },
+      "RulesThread": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "title": {
+            "type": "string"
+          },
+          "author": {
+            "type": "string"
+          },
+          "posts": {
+            "type": "integer"
+          },
+          "url": {
+            "type": "string"
+          }
+        }
+      },
+      "RulesResult": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "retryAfterSeconds": {
+            "type": "integer"
+          },
+          "forumUrl": {
+            "type": "string"
+          },
+          "totalThreads": {
+            "type": "integer"
+          },
+          "threads": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RulesThread"
+            }
+          }
+        }
+      },
+      "Result": {
+        "type": "object",
+        "properties": {
+          "fileName": {
+            "type": "string"
+          },
+          "pages": {
+            "type": "integer"
+          },
+          "text": {
+            "type": "string"
+          },
+          "scoringExcerpts": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "scoringSuggestion": {
+            "$ref": "#/components/schemas/ScoringSuggestion"
+          }
+        }
+      },
+      "SuggestedField": {
+        "type": "object",
+        "properties": {
+          "name": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "checkbox",
+              "counter",
+              "manual"
+            ]
+          },
+          "pointsPerUnit": {
+            "type": "integer"
+          }
+        }
+      },
+      "ScoringSuggestion": {
+        "type": "object",
+        "properties": {
+          "gameName": {
+            "type": "string"
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/SuggestedField"
+            }
+          },
+          "notes": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "WSMessage": {
+        "type": "object",
+        "properties": {
+          "type": {
+            "type": "string"
+          },
+          "payload": {}
+        }
+      },
+      "RoomPayload": {
+        "type": "object",
+        "properties": {
+          "room": {
+            "type": "string"
+          }
+        }
+      },
+      "QueryInvalidatePayload": {
+        "type": "object",
+        "properties": {
+          "queryKey": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        }
+      },
+      "BeaconPayload": {
+        "type": "object",
+        "properties": {
+          "timestamp": {
+            "type": "integer"
+          },
+          "message": {
+            "type": "string"
+          }
+        }
+      },
+      "SpyMessagePayload": {
+        "type": "object",
+        "properties": {
+          "clientId": {
+            "type": "string"
+          },
+          "userId": {
+            "type": "string"
+          },
+          "originalType": {
+            "type": "string"
+          },
+          "payload": {},
+          "timestamp": {
+            "type": "integer"
+          },
+          "direction": {
+            "type": "string"
+          }
+        }
+      },
+      "ClientInfo": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "user_id": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string"
+          },
+          "rooms": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "connected_at": {
+            "type": "integer"
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "error"
+        ]
+      },
+      "Status": {
+        "type": "object",
+        "properties": {
+          "status": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "Total": {
+        "type": "object",
+        "properties": {
+          "playerId": {
+            "type": "string"
+          },
+          "total": {
+            "type": "integer"
+          }
+        }
+      },
+      "Session": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "tableCode": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Player"
+            }
+          },
+          "values": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "integer"
+              }
+            }
+          },
+          "manualPoints": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer"
+            }
+          },
+          "status": {
+            "type": "string"
+          },
+          "playedSeconds": {
+            "type": "integer"
+          },
+          "runningSince": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "pausedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "boardPhotoUpdatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "lastModified": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "finishedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "durationSeconds": {
+            "type": "integer",
+            "format": "int64"
+          },
+          "totals": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Total"
+            }
+          },
+          "winners": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Total"
+            }
+          }
+        }
+      },
+      "MySession": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/Session"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "gameName": {
+                "type": "string"
+              },
+              "myPlayerId": {
+                "type": "string"
+              }
+            }
+          }
+        ]
+      },
+      "AuthSession": {
+        "type": "object",
+        "properties": {
+          "user": {
+            "$ref": "#/components/schemas/User"
+          },
+          "token": {
+            "type": "string"
+          }
+        }
+      },
+      "CreatedTable": {
+        "type": "object",
+        "properties": {
+          "code": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "hostToken": {
+            "type": "string"
+          }
+        }
+      },
+      "Stats": {
+        "type": "object",
+        "properties": {
+          "finishedGames": {
+            "type": "integer"
+          },
+          "wins": {
+            "type": "integer"
+          },
+          "ties": {
+            "type": "integer"
+          },
+          "totalPoints": {
+            "type": "integer"
+          }
+        }
+      },
+      "RuleInput": {
+        "type": "object",
+        "properties": {
+          "bggId": {
+            "type": "integer"
+          },
+          "gameName": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "winCondition": {
+            "type": "string",
+            "enum": [
+              "highest_total",
+              "lowest_total"
+            ]
+          },
+          "fields": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/ScoreField"
+            }
+          },
+          "isPublic": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "gameName",
+          "name",
+          "fields"
+        ]
+      },
+      "ScheduledGameInput": {
+        "type": "object",
+        "properties": {
+          "gameName": {
+            "type": "string"
+          },
+          "ruleId": {
+            "type": "string"
+          },
+          "scheduledAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "players": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "gameName",
+          "scheduledAt"
+        ]
+      },
+      "LegacyCredentials": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "minLength": 3,
+            "maxLength": 30,
+            "pattern": "^[A-Za-z0-9_]+$"
+          },
+          "password": {
+            "type": "string",
+            "minLength": 12,
+            "maxLength": 1024
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ]
+      },
+      "LegacyLogin": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "password": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ]
+      }
+    },
+    "securitySchemes": {
+      "LegacyBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Token devuelto por /v1/auth/login o signup."
+      },
+      "JWTBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "JWT Foundation. /api requiere JWT; los tokens de /v1 no sirven en /api."
+      },
+      "TableToken": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "X-Table-Token",
+        "description": "hostToken devuelto al crear la mesa."
+      },
+      "AccessCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "access_token"
+      },
+      "RefreshCookie": {
+        "type": "apiKey",
+        "in": "cookie",
+        "name": "refresh_token"
+      }
+    }
+  }
+}

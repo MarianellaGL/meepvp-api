@@ -62,10 +62,13 @@ func TestRankGamesRejectsInventedIDs(t *testing.T) {
 
 func TestCodexCLIUsesStructuredOutputForScoring(t *testing.T) {
 	t.Setenv("DATABASE_URL", "do-not-pass-to-ai")
+	t.Setenv("OPENAI_API_KEY", "server-test-key")
+	t.Setenv("CODEX_API_KEY", "")
 	bin := filepath.Join(t.TempDir(), "fake-codex")
 	script := `#!/bin/sh
 [ -z "$DATABASE_URL" ] || exit 2
 [ -n "$CODEX_HOME" ] || exit 3
+[ "$CODEX_API_KEY" = "server-test-key" ] || exit 4
 while [ "$#" -gt 0 ]; do
   if [ "$1" = "--output-last-message" ]; then
     shift

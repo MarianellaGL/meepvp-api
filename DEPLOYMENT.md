@@ -33,8 +33,14 @@ only commits whose CI checks pass.
 | `APP_ENV` | `production`, supplied by the Blueprint. |
 | `LOG_LEVEL` | `info`, supplied by the Blueprint. |
 | `BGG_API_TOKEN` | Optional: add the existing BoardGameGeek token to enable authenticated BGG requests. |
+| `OPENAI_API_KEY` | Existing server-side OpenAI key, also used by Codex CLI for optional AI suggestions and BGG search ranking. |
+| `AI_PROVIDER` | `codex-cli` from the image and Blueprint; set `responses` to use the direct Responses API. |
 
 Render supplies `PORT`; the server already listens on that port on all interfaces.
+The Docker image installs Codex CLI at build time. The server invokes it only for
+optional AI requests and keeps the key out of the mobile app. A changed Blueprint
+does not populate `sync: false` secrets on an existing service; check that
+`OPENAI_API_KEY` is already set in Render before deploying.
 No local `.env` or `config.yaml` is included in the image. Production requires
 a strong JWT secret and an absolute base URL. SMTP is optional. Without an
 SMTP host, production disables email delivery and never logs email bodies or

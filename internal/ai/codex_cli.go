@@ -113,10 +113,17 @@ func (c *Client) completeCLI(ctx context.Context, payload []byte) (response, err
 
 func cliEnvironment(dir string) []string {
 	env := []string{"HOME=" + dir}
-	for _, key := range []string{"PATH", "CODEX_API_KEY"} {
+	for _, key := range []string{"PATH"} {
 		if value, ok := os.LookupEnv(key); ok {
 			env = append(env, key+"="+value)
 		}
+	}
+	key := strings.TrimSpace(os.Getenv("CODEX_API_KEY"))
+	if key == "" {
+		key = strings.TrimSpace(os.Getenv("OPENAI_API_KEY"))
+	}
+	if key != "" {
+		env = append(env, "CODEX_API_KEY="+key)
 	}
 	if home := strings.TrimSpace(os.Getenv("AI_CODEX_HOME")); home != "" {
 		env = append(env, "CODEX_HOME="+home)

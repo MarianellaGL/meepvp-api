@@ -11,7 +11,7 @@ services:
     dockerfilePath: ./Dockerfile
     dockerContext: .
     healthCheckPath: /health
-    # Deploy manually until the repository's Docker Hub publish check is fixed.
+    # Deploy manually until automatic deploys are enabled for this service.
     autoDeployTrigger: "off"
     envVars:
       - key: APP_ENV

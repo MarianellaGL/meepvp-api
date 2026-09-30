@@ -19,9 +19,9 @@ remains the frontend.
 
 The Blueprint uses the Free plan and Ohio region, matching the current Neon
 project's `aws-us-east-2` region. It builds directly from GitHub and does not
-require a Docker Hub image or registry credentials. Deploys are manual initially;
-after fixing the Docker Hub publish check, set `autoDeployTrigger: checksPass`
-to deploy only commits whose CI checks pass.
+require an external image registry or registry credentials. Deploys are manual
+initially; set `autoDeployTrigger: checksPass` when you want Render to deploy
+only commits whose CI checks pass.
 
 ## Runtime variables
 
@@ -54,8 +54,7 @@ connections would allow a pooled application URL later.
 
 Render Free services sleep after 15 minutes without inbound traffic and can take
 about a minute to wake. Clients should reconnect WebSockets after interruptions.
-The mobile app still needs its WebSocket subscription implemented; hosting the
-API does not add that client behavior.
+The mobile app reconnects its WebSocket subscription after interruptions.
 
 If you later want email verification or password recovery, set `SMTP_HOST`,
 `SMTP_USERNAME`, `SMTP_PASSWORD` and a verified `SMTP_FROM`. Render Free blocks

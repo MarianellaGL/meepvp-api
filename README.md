@@ -66,26 +66,6 @@ go run ./cmd/cli adduser --email admin@example.com --name Admin --password 'Repl
 
 See [FOUNDATION.md](FOUNDATION.md) for routes, compatibility and migration details.
 
-## Docker Hub publishing
-
-In GitHub repository Settings → Secrets and variables → Actions, configure:
-
-- Variable `DOCKERHUB_USERNAME`: the Docker Hub login that can push to the repository.
-- Variable `DOCKERHUB_IMAGE`: the destination, such as `your-namespace/meppvp-api`, without a tag.
-- Secret `DOCKERHUB_TOKEN`: a Docker Hub access token with write access. Never commit it.
-
-Linking Docker Hub to GitHub does not supply these Actions credentials. Once the
-variables and secret are configured, pushes to `main` publish only after the Go
-CI job passes. The image supports Linux AMD64 and ARM64 and receives `latest`
-and `sha-<full-commit>` tags. Pull requests never publish. The publish job is
-skipped while `DOCKERHUB_IMAGE` is unset; setting it enables publishing and
-requires all three configuration entries. If using Docker Hub's own automated
-builds, choose one publishing mechanism to avoid competing updates to `latest`.
-
-The image expects runtime configuration through environment variables, including
-`DATABASE_URL`, `AUTH_JWT_SECRET` and `SERVER_BASE_URL`. PostgreSQL runs separately;
-the image does not contain application data, local config or credentials.
-
 ## Deploy on Render with Neon
 
 Use [render.yaml](render.yaml) to build the Go Docker image on Render while

@@ -33,15 +33,18 @@ only commits whose CI checks pass.
 | `APP_ENV` | `production`, supplied by the Blueprint. |
 | `LOG_LEVEL` | `info`, supplied by the Blueprint. |
 | `BGG_API_TOKEN` | Optional: add the existing BoardGameGeek token to enable authenticated BGG requests. |
-| `OPENAI_API_KEY` | Existing server-side OpenAI key, also used by Codex CLI for optional AI suggestions and BGG search ranking. |
-| `AI_PROVIDER` | Optional. Leave unset to use the direct Responses API; only set `codex-cli` in an isolated worker. |
+| `OPENAI_API_KEY` | Existing server-side OpenAI key for the direct Responses API fallback. |
+| `CODEX_API_KEY` | Separate restricted project key for the isolated Codex CLI worker; set it in Render Environment. |
+| `AI_PROVIDER` | `codex-worker` in the image and Blueprint. Without `CODEX_API_KEY`, startup uses the direct Responses API. |
 
 Render supplies `PORT`; the server already listens on that port on all interfaces.
-The Docker image installs Codex CLI at build time. The direct Responses API
-provider stays active on the public server; the CLI needs a separate isolated
-worker before it is enabled for user requests. A changed Blueprint
-does not populate `sync: false` secrets on an existing service; check that
-`OPENAI_API_KEY` is already set in Render before deploying.
+The Docker image installs Codex CLI at build time. At startup it runs the CLI
+worker under a separate OS user with only `CODEX_API_KEY` and a private Unix
+socket; the API process keeps its database configuration and cannot read the
+worker's environment. A changed Blueprint does not populate `sync: false`
+secrets on an existing service. Set `CODEX_API_KEY` manually in Render to
+activate the worker; until then, the existing `OPENAI_API_KEY` continues to
+provide direct AI assistance.
 No local `.env` or `config.yaml` is included in the image. Production requires
 a strong JWT secret and an absolute base URL. SMTP is optional. Without an
 SMTP host, production disables email delivery and never logs email bodies or

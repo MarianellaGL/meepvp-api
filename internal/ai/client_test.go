@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"tablescore-api/internal/bgg"
 )
@@ -89,5 +90,56 @@ exit 1
 	}
 	if suggestion == nil || suggestion.Source != "ai" || suggestion.Fields[0].PointsPerUnit != 2 {
 		t.Fatalf("unexpected suggestion: %#v", suggestion)
+	}
+}
+
+func TestWorkerRoutesScoringOverUnixSocket(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "fake-codex")
+	script := `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    printf '%s' '{"found":true,"gameName":"Juego","fields":[{"name":"Monedas","kind":"counter","pointsPerUnit":2}],"notes":[]}' > "$1"
+    exit 0
+  fi
+  shift
+done
+exit 1
+`
+	if err := os.WriteFile(bin, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	socketDir, err := os.MkdirTemp("/tmp", "meeple-ai-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(socketDir) }()
+	socket := filepath.Join(socketDir, "worker.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- ServeWorker(ctx, socket, bin) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(socket); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("worker did not open socket")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	client := &Client{provider: "codex-worker", workerSocket: socket}
+	suggestion, err := client.SuggestScoring(context.Background(), "Juego", "Cada moneda vale 2 puntos", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suggestion == nil || suggestion.Fields[0].PointsPerUnit != 2 {
+		t.Fatalf("unexpected suggestion: %#v", suggestion)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

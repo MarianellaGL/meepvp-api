@@ -15,12 +15,15 @@ import (
 	"time"
 )
 
-// Keep at most two CLI sessions in flight: each one starts a model session.
-var cliSlots = make(chan struct{}, 2)
+// Keep one CLI session in flight on the small API instance.
+var cliSlots = make(chan struct{}, 1)
 
 func (c *Client) complete(ctx context.Context, payload []byte) (response, error) {
 	if c.provider == "codex-cli" {
 		return c.completeCLI(ctx, payload)
+	}
+	if c.provider == "codex-worker" {
+		return c.completeWorker(ctx, payload)
 	}
 	var result response
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))

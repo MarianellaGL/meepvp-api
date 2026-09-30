@@ -16,12 +16,13 @@ import (
 
 // Client only receives extracted text. Original PDFs and images never leave the OCR flow.
 type Client struct {
-	key      string
-	model    string
-	endpoint string
-	http     *http.Client
-	provider string
-	cliPath  string
+	key          string
+	model        string
+	endpoint     string
+	http         *http.Client
+	provider     string
+	cliPath      string
+	workerSocket string
 }
 
 func NewFromEnvironment() *Client {
@@ -33,11 +34,16 @@ func NewFromEnvironment() *Client {
 	if provider == "codex-cli" {
 		return &Client{provider: provider, cliPath: "codex"}
 	}
+	if provider == "codex-worker" {
+		return &Client{provider: provider, workerSocket: workerSocketPath()}
+	}
 	return &Client{key: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model: model,
 		endpoint: "https://api.openai.com/v1/responses", http: &http.Client{Timeout: 25 * time.Second}}
 }
 
-func (c *Client) Enabled() bool { return c != nil && (c.key != "" || c.provider == "codex-cli") }
+func (c *Client) Enabled() bool {
+	return c != nil && (c.key != "" || c.provider == "codex-cli" || c.provider == "codex-worker")
+}
 
 type response struct {
 	Status string `json:"status"`

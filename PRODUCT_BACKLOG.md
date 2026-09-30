@@ -44,6 +44,24 @@ Criterios propuestos para diseñar la mecánica:
 - Seleccionar un primer juego concreto y su reglamento para validar el flujo
   completo antes de generalizarlo a otros títulos.
 
-Estado: ambos pedidos quedan anotados para diseño e implementación futura.
+## Asistencia de IA para buscar y editar planillas
+
+Pedido: ofrecer una opción «Usar IA para búsqueda» que encuentre posibles
+reglamentos o tablas de puntuación para un juego, y permitir crear o ajustar una
+planilla a partir de una instrucción escrita por el usuario.
+
+Criterios para una implementación futura:
+
+- Mostrar el enlace, la fuente y la edición de cada resultado antes de importarlo.
+- Pedir al usuario que elija el PDF, imagen o texto correcto; después usar los
+  flujos existentes de extracción y edición.
+- Para instrucciones libres, proponer cambios sobre una copia editable de la
+  planilla, con vista previa de los campos y puntos afectados.
+- Exigir revisión y confirmación antes de guardar; no alterar una planilla ni
+  una partida activa automáticamente.
+- Conservar la fuente o instrucción que originó cada propuesta para que el
+  usuario pueda comprobarla.
+
+Estado: pedidos anotados para diseño e implementación futura.
 La incorporación de Wingspan base incluye solo su planilla y notas de reglas;
 no implementa estas nuevas mecánicas.

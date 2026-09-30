@@ -18,7 +18,6 @@ RUN useradd --system --uid 65532 --no-create-home app
 COPY --from=codex-install /opt/codex-home/packages/standalone /opt/codex-home/packages/standalone
 COPY --from=codex-install /opt/codex-bin /opt/codex-bin
 ENV PATH=/opt/codex-bin:$PATH
-ENV AI_PROVIDER=codex-cli
 RUN codex --version
 USER 65532:65532
 WORKDIR /

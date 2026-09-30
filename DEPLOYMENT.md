@@ -34,11 +34,12 @@ only commits whose CI checks pass.
 | `LOG_LEVEL` | `info`, supplied by the Blueprint. |
 | `BGG_API_TOKEN` | Optional: add the existing BoardGameGeek token to enable authenticated BGG requests. |
 | `OPENAI_API_KEY` | Existing server-side OpenAI key, also used by Codex CLI for optional AI suggestions and BGG search ranking. |
-| `AI_PROVIDER` | `codex-cli` from the image and Blueprint; set `responses` to use the direct Responses API. |
+| `AI_PROVIDER` | Optional. Leave unset to use the direct Responses API; only set `codex-cli` in an isolated worker. |
 
 Render supplies `PORT`; the server already listens on that port on all interfaces.
-The Docker image installs Codex CLI at build time. The server invokes it only for
-optional AI requests and keeps the key out of the mobile app. A changed Blueprint
+The Docker image installs Codex CLI at build time. The direct Responses API
+provider stays active on the public server; the CLI needs a separate isolated
+worker before it is enabled for user requests. A changed Blueprint
 does not populate `sync: false` secrets on an existing service; check that
 `OPENAI_API_KEY` is already set in Render before deploying.
 No local `.env` or `config.yaml` is included in the image. Production requires

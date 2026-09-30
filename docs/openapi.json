@@ -1559,6 +1559,19 @@
         "description": "JPEG, PNG o WebP; máximo 5 MB. Reemplaza la foto anterior."
       }
     },
+    "/v1/ocr/scoring-text": {
+      "post": {
+        "operationId": "post_v1_ocr_scoring_text",
+        "tags": ["PDF"],
+        "summary": "Proponer puntuación desde texto OCR de una imagen",
+        "description": "Recibe solo texto reconocido en el dispositivo, no la imagen. La propuesta puede usar IA y siempre debe revisarse.",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "required": ["text"], "properties": {"gameName": {"type": "string"}, "text": {"type": "string"}}}}}
+        },
+        "responses": {"200": {"description": "Texto y propuesta editable", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Result"}}}}}
+      }
+    },
     "/v1/pdf/extract": {
       "post": {
         "operationId": "post_v1_pdf_extract",
@@ -1598,6 +1611,9 @@
                   "file": {
                     "type": "string",
                     "format": "binary"
+                  },
+                  "gameName": {
+                    "type": "string"
                   }
                 },
                 "required": [
@@ -1712,6 +1728,16 @@
             }
           }
         ]
+      }
+    },
+    "/v1/bgg/search": {
+      "get": {
+        "operationId": "get_v1_bgg_search",
+        "tags": ["BoardGameGeek"],
+        "summary": "Buscar juegos en BGG",
+        "description": "Devuelve registros e IDs reales de BGG. La IA opcional puede corregir la consulta y ordenar resultados.",
+        "parameters": [{"name": "query", "in": "query", "required": true, "schema": {"type": "string", "minLength": 2, "maxLength": 100}}],
+        "responses": {"200": {"description": "Resultados", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CollectionResult"}}}}, "202": {"description": "BGG está procesando la consulta"}, "429": {"description": "BGG limitó solicitudes"}}
       }
     },
     "/v1/bgg/collections/{username}": {
@@ -3426,6 +3452,10 @@
             "items": {
               "type": "string"
             }
+          },
+          "source": {
+            "type": "string",
+            "enum": ["ai"]
           }
         }
       },

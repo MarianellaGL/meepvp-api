@@ -26,3 +26,7 @@ services:
         sync: false
       - key: SERVER_BASE_URL
         sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_MODEL
+        value: gpt-4o-mini

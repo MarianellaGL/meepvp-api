@@ -97,3 +97,5 @@ func scoringExcerpts(text string) []string {
 	}
 	return result
 }
+
+func ScoringExcerpts(text string) []string { return scoringExcerpts(text) }

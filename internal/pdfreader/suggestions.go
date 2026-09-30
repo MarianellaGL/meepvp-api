@@ -17,6 +17,7 @@ type ScoringSuggestion struct {
 	GameName string           `json:"gameName"`
 	Fields   []SuggestedField `json:"fields"`
 	Notes    []string         `json:"notes"`
+	Source   string           `json:"source,omitempty"`
 }
 
 func suggestScoring(text string) *ScoringSuggestion {

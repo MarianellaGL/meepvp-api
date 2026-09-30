@@ -157,10 +157,12 @@ BGG endpoints return `429` with `Retry-After` when BGG limits requests. A `202` 
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `GET` | `/v1/bgg/collections/{username}` | Import a BGG collection; may return `202` while BGG processes it |
+| `GET` | `/v1/bgg/search?query=` | Search actual BGG games; optional AI query correction and ranking |
 | `GET` | `/v1/bgg/games/{gameID}/rules` | List the game's Rules forum discussions and links |
 | `GET` | `/v1/rulebooks` | Search EN/FR rulebooks and save catalog metadata |
 | `POST` | `/v1/rulebooks/{id}/extract` | Read a catalog PDF and propose editable scoring fields |
 | `POST` | `/v1/pdf/extract` | Extract selectable text and scoring passages from a multipart PDF |
+| `POST` | `/v1/ocr/scoring-text` | Suggest editable scoring fields from text recognized on the device |
 | `POST` | `/v1/scoring-rules/{ruleID}/pdf-imports` | Deprecated: returns 410; use `/v1/pdf/extract` |
 | `GET` | `/v1/pdf-imports/{id}` | Deprecated: returns 410; use `/v1/pdf/extract` |
 
@@ -182,7 +184,9 @@ ID in the sheet. Reviewed suggestions cover the English base Catan/Everdell/Wing
 rulebooks; other games use printed tables or manual configuration. The catalog
 does not infer arbitrary game rules or grant rights to republish source PDFs.
 
-`POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. The old queued import routes are disabled because they never processed jobs. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
+`POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. The old queued import routes are disabled because they never processed jobs. The mobile app reads standalone scoring-table images on the device, sends only recognized text to `/v1/ocr/scoring-text`, and asks users to confirm the extracted text and scores before saving a sheet.
+
+Set `OPENAI_API_KEY` on the API service (Render Environment or an untracked local `.env`) to enable optional AI assistance. `OPENAI_MODEL` defaults to `gpt-4o-mini`. The API sends bounded extracted text, never the original PDF or image, to the Responses API with `store: false`. A validated structured response can propose editable fields when no reviewed template matches. If the key is absent or the model fails, text extraction, manual sheet creation, and BGG search still work. BGG search only returns real BGG records and IDs; AI may retry a translated/corrected query and reorder those records. Limit AI usage with the route rate limits and your OpenAI project limits. Never put the key in the mobile app.
 
 When installed, Poppler extracts text with column layout; Tesseract reads pages without selectable text using English and Spanish language data. The Docker image includes both. On macOS without Poppler, extraction uses the Go parser with PDFKit/Vision as a fallback via Xcode Command Line Tools. Temporary uploads and rendered pages are removed after extraction. For local Poppler/OCR support, install `poppler`, `tesseract`, and its English/Spanish language data.
 

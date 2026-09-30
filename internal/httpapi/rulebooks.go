@@ -64,6 +64,7 @@ func (a *API) extractRulebook(c *gin.Context) {
 		writeError(c.Writer, http.StatusUnprocessableEntity, "could not extract rulebook PDF")
 		return
 	}
+	a.addAISuggestion(c.Request, &result, book.Name)
 	writeJSON(c.Writer, http.StatusOK, struct {
 		pdfreader.Result
 		Rulebook domain.Rulebook `json:"rulebook"`

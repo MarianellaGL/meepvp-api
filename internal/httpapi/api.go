@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 	"path"
 	"strconv"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"tablescore-api/handlers"
+	"tablescore-api/internal/ai"
 	"tablescore-api/internal/bgg"
 	"tablescore-api/internal/domain"
 	"tablescore-api/internal/pdfreader"
@@ -24,6 +26,7 @@ type API struct {
 	store      store.Repository
 	bgg        *bgg.Client
 	rulebooks  *rulebooks.Client
+	ai         *ai.Client
 }
 
 type playerTotal struct {
@@ -43,7 +46,7 @@ func New(s store.Repository, clients ...*bgg.Client) *API {
 	if len(clients) > 0 && clients[0] != nil {
 		client = clients[0]
 	}
-	return &API{store: s, bgg: client, rulebooks: rulebooks.New()}
+	return &API{store: s, bgg: client, rulebooks: rulebooks.New(), ai: ai.NewFromEnvironment()}
 }
 
 func (a *API) extractPDF(w http.ResponseWriter, r *http.Request) {
@@ -69,7 +72,42 @@ func (a *API) extractPDF(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
+	a.addAISuggestion(r, &result, r.FormValue("gameName"))
 	writeJSON(w, http.StatusOK, result)
+}
+
+func (a *API) extractScoringText(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		GameName string `json:"gameName"`
+		Text     string `json:"text"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 64<<10)
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	input.GameName = strings.TrimSpace(input.GameName)
+	input.Text = strings.TrimSpace(input.Text)
+	if len([]rune(input.GameName)) > 120 || len([]rune(input.Text)) > 30000 || input.Text == "" {
+		writeError(w, http.StatusBadRequest, "invalid extracted text")
+		return
+	}
+	result := pdfreader.Result{FileName: "Imagen de tabla de puntos", Pages: 1, Text: input.Text,
+		Excerpts: pdfreader.ScoringExcerpts(input.Text)}
+	a.addAISuggestion(r, &result, input.GameName)
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (a *API) addAISuggestion(r *http.Request, result *pdfreader.Result, gameName string) {
+	if result.Suggestion != nil || !a.ai.Enabled() {
+		return
+	}
+	suggestion, err := a.ai.SuggestScoring(r.Context(), gameName, result.Text, result.Excerpts)
+	if err != nil {
+		// OCR is still useful when the optional model is unavailable.
+		slog.Warn("AI scoring suggestion unavailable", "error", err)
+		return
+	}
+	result.Suggestion = suggestion
 }
 
 func (a *API) getBGGCollection(w http.ResponseWriter, r *http.Request) {
@@ -84,6 +122,33 @@ func (a *API) getBGGCollection(w http.ResponseWriter, r *http.Request) {
 		status = http.StatusAccepted
 	}
 	writeJSON(w, status, collection)
+}
+
+func (a *API) searchBGG(w http.ResponseWriter, r *http.Request) {
+	query := strings.TrimSpace(r.URL.Query().Get("query"))
+	if len([]rune(query)) < 2 || len([]rune(query)) > 100 {
+		writeError(w, http.StatusBadRequest, "search query must be 2 to 100 characters")
+		return
+	}
+	result, err := a.bgg.Search(r.Context(), query)
+	if err != nil {
+		writeBGGError(w, err)
+		return
+	}
+	if result.Status == "ready" && len(result.Games) == 0 {
+		if alternative := a.ai.AlternateBGGQuery(r.Context(), query); alternative != "" {
+			if retry, retryErr := a.bgg.Search(r.Context(), alternative); retryErr == nil && retry.Status == "ready" && len(retry.Games) > 0 {
+				result = retry
+			}
+		}
+	}
+	status := http.StatusOK
+	if result.Status == "processing" {
+		status = http.StatusAccepted
+	} else {
+		result.Games = a.ai.RankGames(r.Context(), query, result.Games)
+	}
+	writeJSON(w, status, result)
 }
 
 func (a *API) getBGGRules(w http.ResponseWriter, r *http.Request) {

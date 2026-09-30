@@ -33,7 +33,7 @@ func (c *Client) complete(ctx context.Context, payload []byte) (response, error)
 	if err != nil {
 		return result, err
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
 		return result, fmt.Errorf("OpenAI returned HTTP %d", res.StatusCode)
 	}
@@ -70,7 +70,7 @@ func (c *Client) completeCLI(ctx context.Context, payload []byte) (response, err
 	if err != nil {
 		return result, err
 	}
-	defer os.RemoveAll(dir)
+	defer func() { _ = os.RemoveAll(dir) }()
 	schemaPath := filepath.Join(dir, "schema.json")
 	outputPath := filepath.Join(dir, "result.json")
 	if err := os.WriteFile(schemaPath, request.Text.Format.Schema, 0600); err != nil {
@@ -89,7 +89,7 @@ func (c *Client) completeCLI(ctx context.Context, payload []byte) (response, err
 		if ctx.Err() != nil {
 			return result, ctx.Err()
 		}
-		return result, fmt.Errorf("Codex CLI failed: %w", err)
+		return result, fmt.Errorf("codex CLI failed: %w", err)
 	}
 	output, err := os.ReadFile(outputPath)
 	if err != nil {

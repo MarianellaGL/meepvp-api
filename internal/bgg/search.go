@@ -55,7 +55,7 @@ func (c *Client) Search(ctx context.Context, query string) (SearchResult, error)
 	if err != nil {
 		return SearchResult{}, fmt.Errorf("request BGG search: %w", err)
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode == http.StatusAccepted {
 		return SearchResult{Status: "processing", RetryAfterSeconds: retryAfter(res), Games: []CollectionGame{}}, nil
 	}
@@ -123,7 +123,7 @@ func (c *Client) enrichSearch(ctx context.Context, games []CollectionGame) {
 	if err != nil {
 		return
 	}
-	defer res.Body.Close()
+	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
 		return
 	}

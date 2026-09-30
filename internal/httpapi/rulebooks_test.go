@@ -60,3 +60,13 @@ func TestCatalogSearchPersistsMetadataWithoutChangingReviewedEdition(t *testing.
 	require.Equal(t, "Base game", saved.Edition)
 	require.Equal(t, "https://cdn.1j1ju.com/medias/new.pdf", saved.PDFURL)
 }
+
+func TestScoringDraftEndpointReportsUnavailableAssistant(t *testing.T) {
+	t.Setenv("AI_PROVIDER", "")
+	t.Setenv("OPENAI_API_KEY", "")
+	h := httpapi.New(store.NewMemoryStore()).Handler()
+	input := map[string]any{"gameName": "Viticulture", "text": "Victory points are tracked during the game. The game ends according to the victory point track."}
+	require.Equal(t, 503, request(t, h, "POST", "/v1/ai/scoring-suggestion", input, "").Code)
+	input["text"] = "short"
+	require.Equal(t, 400, request(t, h, "POST", "/v1/ai/scoring-suggestion", input, "").Code)
+}

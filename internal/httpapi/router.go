@@ -61,6 +61,7 @@ func (a *API) Handler() http.Handler {
 	v1.GET("/bgg/games/:id/rules", gin.WrapF(a.getBGGRules))
 	v1.POST("/pdf/extract", rateLimit(5, time.Minute, time.Now), gin.WrapF(a.extractPDF))
 	v1.POST("/ocr/scoring-text", rateLimit(10, time.Minute, time.Now), gin.WrapF(a.extractScoringText))
+	v1.POST("/ai/scoring-suggestion", rateLimit(3, time.Minute, time.Now), gin.WrapF(a.suggestScoringDraft))
 
 	sessions := v1.Group("/sessions/:id")
 	sessions.GET("", gin.WrapF(a.getSession))

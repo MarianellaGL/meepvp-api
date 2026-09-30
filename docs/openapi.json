@@ -1559,6 +1559,19 @@
         "description": "JPEG, PNG o WebP; máximo 5 MB. Reemplaza la foto anterior."
       }
     },
+    "/v1/ai/scoring-suggestion": {
+      "post": {
+        "operationId": "post_v1_ai_scoring_suggestion",
+        "tags": ["PDF"],
+        "summary": "Proponer una planilla editable con IA desde texto extraído",
+        "description": "Reintenta la propuesta sobre el texto de un reglamento. No guarda la planilla. Devuelve scoringSuggestion nulo si no hay evidencia suficiente; 503 si la IA no está disponible. Límite de 3 solicitudes por minuto e IP.",
+        "requestBody": {
+          "required": true,
+          "content": {"application/json": {"schema": {"type": "object", "required": ["text"], "properties": {"gameName": {"type": "string", "maxLength": 120}, "text": {"type": "string", "minLength": 40, "maxLength": 120000}}}}}
+        },
+        "responses": {"200": {"description": "Propuesta para revisión", "content": {"application/json": {"schema": {"type": "object", "properties": {"scoringSuggestion": {"nullable": true, "type": "object"}}}}}}, "503": {"description": "Asistente de IA no disponible"}}
+      }
+    },
     "/v1/ocr/scoring-text": {
       "post": {
         "operationId": "post_v1_ocr_scoring_text",

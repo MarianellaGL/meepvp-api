@@ -163,6 +163,7 @@ BGG endpoints return `429` with `Retry-After` when BGG limits requests. A `202` 
 | `POST` | `/v1/rulebooks/{id}/extract` | Read a catalog PDF and propose editable scoring fields |
 | `POST` | `/v1/pdf/extract` | Extract selectable text and scoring passages from a multipart PDF |
 | `POST` | `/v1/ocr/scoring-text` | Suggest editable scoring fields from text recognized on the device |
+| `POST` | `/v1/ai/scoring-suggestion` | Retry an editable AI scoring proposal from previously extracted rulebook text |
 | `POST` | `/v1/scoring-rules/{ruleID}/pdf-imports` | Deprecated: returns 410; use `/v1/pdf/extract` |
 | `GET` | `/v1/pdf-imports/{id}` | Deprecated: returns 410; use `/v1/pdf/extract` |
 
@@ -192,7 +193,7 @@ The Render Docker image installs Codex CLI 0.159.0 and starts it as a separate O
 
 When installed, Poppler extracts text with column layout; Tesseract reads pages without selectable text using English and Spanish language data. The Docker image includes both. On macOS without Poppler, extraction uses the Go parser with PDFKit/Vision as a fallback via Xcode Command Line Tools. Temporary uploads and rendered pages are removed after extraction. For local Poppler/OCR support, install `poppler`, `tesseract`, and its English/Spanish language data.
 
-The response can include `scoringSuggestion: {gameName, fields, notes}`. Reviewed base-game templates are selected only when the extracted text contains the game's name and its scoring breakdown; filenames alone never select one. Everdell imports five manual point categories. Catan imports settlement/city/VP-card counters and the two unique bonus checkboxes. The mobile reader previews the suggestion and preserves field kinds and multipliers in the editable creation form. Unknown rulebooks still return text and excerpts; existing printed scoring sheets remain supported.
+The response can include `scoringSuggestion: {gameName, fields, notes}`. Reviewed base-game templates are selected only when the extracted text contains the game's name and its scoring breakdown; filenames alone never select one. Everdell imports five manual point categories. Catan imports settlement/city/VP-card counters and the two unique bonus checkboxes. The mobile reader previews the suggestion and preserves field kinds and multipliers in the editable creation form. When extraction has no usable scoring structure, the reader can explicitly request an AI proposal from the extracted text; it still requires review in the editor. Unknown rulebooks still return text and excerpts; existing printed scoring sheets remain supported.
 
 These templates cover scorekeeping for the base games. Everdell tie-breakers and Catan's own-turn victory condition are described for review, but the generic ranking engine still uses totals and does not enforce either. Catan's hidden VP cards should be entered at the end when using a shared sheet. Expansions and Everdell solo scoring require manual review. Re-upload older saved rulebooks to receive the new suggestion metadata.
 

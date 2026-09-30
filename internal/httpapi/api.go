@@ -110,6 +110,36 @@ func (a *API) addAISuggestion(r *http.Request, result *pdfreader.Result, gameNam
 	result.Suggestion = suggestion
 }
 
+func (a *API) suggestScoringDraft(w http.ResponseWriter, r *http.Request) {
+	var input struct {
+		GameName string `json:"gameName"`
+		Text     string `json:"text"`
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, 512<<10)
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	input.GameName = strings.TrimSpace(input.GameName)
+	input.Text = strings.TrimSpace(input.Text)
+	if len([]rune(input.GameName)) > 120 || len([]rune(input.Text)) < 40 || len([]rune(input.Text)) > 120000 {
+		writeError(w, http.StatusBadRequest, "invalid rulebook text")
+		return
+	}
+	if !a.ai.Enabled() {
+		writeError(w, http.StatusServiceUnavailable, "AI scoring assistant unavailable")
+		return
+	}
+	suggestion, err := a.ai.SuggestScoring(r.Context(), input.GameName, input.Text, pdfreader.ScoringExcerpts(input.Text))
+	if err != nil {
+		slog.Warn("AI scoring draft unavailable", "error", err)
+		writeError(w, http.StatusBadGateway, "could not generate scoring suggestion")
+		return
+	}
+	writeJSON(w, http.StatusOK, struct {
+		Suggestion *pdfreader.ScoringSuggestion `json:"scoringSuggestion"`
+	}{Suggestion: suggestion})
+}
+
 func (a *API) getBGGCollection(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/bgg/collections/")
 	collection, err := a.bgg.Collection(r.Context(), username)

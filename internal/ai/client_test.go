@@ -51,6 +51,19 @@ func TestSuggestScoringUsesStructuredOutputAndValidatesProposal(t *testing.T) {
 	}
 }
 
+func TestScoringEvidenceKeepsRulesFromMiddleOfLongRulebook(t *testing.T) {
+	text := "Viticulture Essential Edition\n" + strings.Repeat("setup and worker placement. ", 450) +
+		"Victory points are tracked during the game. Scoring uses the victory point track.\n" +
+		strings.Repeat("appendix and credits. ", 450)
+	evidence := scoringEvidence(text)
+	if !strings.Contains(evidence, "Victory points are tracked during the game") {
+		t.Fatal("middle scoring evidence was lost")
+	}
+	if len([]rune(evidence)) >= len([]rune(text)) {
+		t.Fatal("long rulebook was not bounded")
+	}
+}
+
 func TestRankGamesRejectsInventedIDs(t *testing.T) {
 	client := &Client{key: "test-key", model: "gpt-4o-mini", endpoint: "https://example.test/v1/responses",
 		http: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return modelResponse(`{"ids":[2,999]}`), nil })}}

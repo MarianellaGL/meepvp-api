@@ -1,11 +1,63 @@
 package store
 
 import (
+	"sort"
 	"strings"
 	"time"
 
 	"tablescore-api/internal/domain"
 )
+
+func (s *MemoryStore) LinkUserTable(userID, tableCode string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tableCode = strings.ToUpper(tableCode)
+	if _, exists := s.tables[tableCode]; !exists {
+		return ErrNotFound
+	}
+	if owner, exists := s.userTables[tableCode]; exists && owner != userID {
+		return ErrConflict
+	}
+	s.userTables[tableCode] = userID
+	return nil
+}
+
+func (s *MemoryStore) ListUserTables(userID string) ([]domain.Table, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	tables := []domain.Table{}
+	for code, owner := range s.userTables {
+		if owner == userID {
+			tables = append(tables, s.tables[code])
+		}
+	}
+	sort.Slice(tables, func(i, j int) bool { return tables[i].CreatedAt.After(tables[j].CreatedAt) })
+	return tables, nil
+}
+
+func (s *MemoryStore) SaveUserAvatar(userID string, data []byte, contentType string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.userAvatars[userID] = memoryBoardPhoto{data: append([]byte(nil), data...), contentType: contentType}
+	return nil
+}
+
+func (s *MemoryStore) GetUserAvatar(userID string) ([]byte, string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	avatar, exists := s.userAvatars[userID]
+	if !exists {
+		return nil, "", ErrNotFound
+	}
+	return append([]byte(nil), avatar.data...), avatar.contentType, nil
+}
+
+func (s *MemoryStore) DeleteUserAvatar(userID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	delete(s.userAvatars, userID)
+	return nil
+}
 
 func (s *MemoryStore) CreateUser(username, passwordHash string) (domain.User, error) {
 	s.mu.Lock()

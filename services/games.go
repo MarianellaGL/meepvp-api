@@ -23,8 +23,8 @@ func (s *GameRepository) changed(result domain.ScoreSession, err error) (domain.
 func (s *GameRepository) CreateSession(tableCode, hostToken, ruleID string, players []domain.Player) (domain.ScoreSession, error) {
 	return s.changed(s.Repository.CreateSession(tableCode, hostToken, ruleID, players))
 }
-func (s *GameRepository) AddPlayer(id, name string) (domain.ScoreSession, error) {
-	return s.changed(s.Repository.AddPlayer(id, name))
+func (s *GameRepository) AddPlayer(id, name, userID string) (domain.ScoreSession, error) {
+	return s.changed(s.Repository.AddPlayer(id, name, userID))
 }
 func (s *GameRepository) UpdateScores(id string, values map[string]map[string]int) (domain.ScoreSession, error) {
 	return s.changed(s.Repository.UpdateScores(id, values))

@@ -61,6 +61,6 @@ smtp:
   username: ""
   password: ""
   # The display name doubles as the product name inside email templates.
-  from: "MeppVP <no-reply@example.com>"
+  from: "MeepVP <no-reply@example.com>"
   # starttls (port 587), tls (implicit TLS, port 465) or none (local relays only).
   tls: starttls

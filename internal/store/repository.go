@@ -14,6 +14,11 @@ type Repository interface {
 	DeleteAuthSession(tokenHash string) error
 	LinkUserSession(userID, sessionID, playerID string) error
 	ListUserSessions(userID string) ([]domain.UserSession, error)
+	LinkUserTable(userID, tableCode string) error
+	ListUserTables(userID string) ([]domain.Table, error)
+	SaveUserAvatar(userID string, data []byte, contentType string) error
+	GetUserAvatar(userID string) ([]byte, string, error)
+	DeleteUserAvatar(userID string) error
 	CreateTable(name string) (domain.Table, error)
 	GetTable(code string) (domain.Table, error)
 	CreateRule(rule domain.ScoringRule) (domain.ScoringRule, error)
@@ -23,7 +28,7 @@ type Repository interface {
 	CreateSession(tableCode, hostToken, ruleID string, players []domain.Player) (domain.ScoreSession, error)
 	GetSession(id string) (domain.ScoreSession, error)
 	ActiveSessionByTable(code string) (domain.ScoreSession, error)
-	AddPlayer(sessionID, name string) (domain.ScoreSession, error)
+	AddPlayer(sessionID, name, userID string) (domain.ScoreSession, error)
 	UpdateScores(sessionID string, values map[string]map[string]int) (domain.ScoreSession, error)
 	SetScore(sessionID, playerID, fieldID string, value int) (domain.ScoreSession, error)
 	AdjustPoints(sessionID, playerID string, delta int) (domain.ScoreSession, error)
@@ -37,6 +42,8 @@ type Repository interface {
 	GetPDFImport(id string) (domain.PDFImport, error)
 	CreateScheduledGame(tableCode, hostToken string, game domain.ScheduledGame) (domain.ScheduledGame, error)
 	ListScheduledGames(tableCode, hostToken string) ([]domain.ScheduledGame, error)
+	UpdateScheduledGame(id, hostToken string, game domain.ScheduledGame) (domain.ScheduledGame, error)
+	DeleteScheduledGame(id, hostToken string) error
 	SetScheduledGameRule(id, hostToken, ruleID string) (domain.ScheduledGame, error)
 	SetScheduledGameSession(id, hostToken, sessionID string) (domain.ScheduledGame, error)
 }

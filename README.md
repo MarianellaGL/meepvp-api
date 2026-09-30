@@ -1,6 +1,6 @@
-# MeppVP API
+# MeepVP API
 
-Go API for the MeppVP board-game scoring app. It stores scoring sheets, tables, game sessions, schedules, and user accounts in PostgreSQL. The Go module and local Docker database still use the original `tablescore` identifiers to preserve existing data and imports.
+Go API for the MeepVP board-game scoring app. It stores scoring sheets, tables, game sessions, schedules, and user accounts in PostgreSQL. The Go module and local Docker database still use the original `tablescore` identifiers to preserve existing data and imports.
 
 Routing uses Gin with the existing `/v1` JSON API. Every response includes an
 `X-Request-ID`; structured logs include the route, status, latency, client IP
@@ -122,9 +122,12 @@ Accounts are optional for playing. Sign up with a 3–30 character username cont
 | `GET` | `/v1/me` | Return the signed-in user |
 | `GET` | `/v1/me/stats` | Return only this account's finished games, wins, ties, and total points |
 | `GET` | `/v1/me/sessions` | Return only sessions linked to this account, including scores and winners |
+| `GET` | `/v1/me/tables` | Return this account's owned tables, including host tokens for recovery on another device |
 | `POST` | `/v1/me/claim-session` | Attach an older anonymous session using `{sessionId, playerId, hostToken}` |
+| `POST` | `/v1/me/claim-table` | Attach an older anonymous table using `{code, hostToken}` |
+| `GET`, `PUT`, `DELETE` | `/v1/me/avatar` | Read, upload, or remove the account avatar (JPEG/PNG/WebP, up to 5 MB) |
 
-Send the token as `Authorization: Bearer <token>`. A signed-in host's new session is automatically linked to the account's first player. The claim route requires the private table host token and prevents two accounts from claiming the same player in a session. Existing anonymous sessions are not assigned to an account automatically without that proof.
+Send the token as `Authorization: Bearer <token>`. A signed-in host's new table is linked to the account; a new session is linked to its first player. A signed-in guest who joins an active session is linked to a new or preloaded player of that name and can see it in account history. A player already linked to another account cannot be claimed. The claim routes require the private table host token. Existing anonymous tables and sessions are not assigned to an account automatically without that proof. Treat tokens returned by `/v1/me/tables` as private credentials.
 
 ## Game and scoring routes
 
@@ -147,10 +150,13 @@ Send the token as `Authorization: Bearer <token>`. A signed-in host's new sessio
 | `POST`, `GET` | `/v1/tables/{code}/scheduled-games` | Create or list game plans with `X-Table-Token` |
 | `PATCH` | `/v1/scheduled-games/{id}/rule` | Assign a scoring sheet to a plan |
 | `PATCH` | `/v1/scheduled-games/{id}/session` | Attach a started session to a plan |
+| `PUT`, `DELETE` | `/v1/scheduled-games/{id}` | Edit or cancel a plan before its session starts, with `X-Table-Token` |
 
 To share a newly created sheet in community search, send `isPublic: true` with a valid bearer token. Creating an unlisted sheet remains available without an account. The `winners` array appears in finished-session responses and includes all players tied for the best score. The sheet's `winCondition` determines whether the highest or lowest total wins; `totals` is returned throughout the session.
 
 Sessions now return `durationSeconds`, the time actually played. Pausing stores the accumulated time and stops scoring; resuming starts the clock again, even days later. `GET /v1/tables/{code}/current-session` finds active or paused games, while finished games return 404. One board photo per session is kept in `session_board_photos`; a new upload replaces it. Anyone with the session ID can read the photo, as with the other anonymous session data.
+
+BGG endpoints return `429` with `Retry-After` when BGG limits requests. A `202` response means BGG is still processing and includes `retryAfterSeconds`.
 
 ```json
 {
@@ -175,8 +181,8 @@ Sessions now return `durationSeconds`, the time actually played. Pausing stores 
 | `GET` | `/v1/rulebooks` | Search EN/FR rulebooks and save catalog metadata |
 | `POST` | `/v1/rulebooks/{id}/extract` | Read a catalog PDF and propose editable scoring fields |
 | `POST` | `/v1/pdf/extract` | Extract selectable text and scoring passages from a multipart PDF |
-| `POST` | `/v1/scoring-rules/{ruleID}/pdf-imports` | Create a queued legacy import job |
-| `GET` | `/v1/pdf-imports/{id}` | Read a queued import job |
+| `POST` | `/v1/scoring-rules/{ruleID}/pdf-imports` | Deprecated: returns 410; use `/v1/pdf/extract` |
+| `GET` | `/v1/pdf-imports/{id}` | Deprecated: returns 410; use `/v1/pdf/extract` |
 
 `GET /v1/rulebooks?query=Catan&language=en` searches rule-book.org and stores
 catalog metadata in PostgreSQL. English and French are supported by the source;
@@ -196,7 +202,7 @@ ID in the sheet. Reviewed suggestions cover the English base Catan/Everdell/Wing
 rulebooks; other games use printed tables or manual configuration. The catalog
 does not infer arbitrary game rules or grant rights to republish source PDFs.
 
-`POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. The legacy PDF import route has no worker yet, so its jobs stay queued. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
+`POST /v1/pdf/extract` accepts files up to 20 MB and 100 pages and does not retain the PDF. The old queued import routes are disabled because they never processed jobs. The mobile app reads standalone scoring-table images on the device and asks users to confirm the extracted text and scores before saving a sheet.
 
 When installed, Poppler extracts text with column layout; Tesseract reads pages without selectable text using English and Spanish language data. The Docker image includes both. On macOS without Poppler, extraction uses the Go parser with PDFKit/Vision as a fallback via Xcode Command Line Tools. Temporary uploads and rendered pages are removed after extraction. For local Poppler/OCR support, install `poppler`, `tesseract`, and its English/Spanish language data.
 

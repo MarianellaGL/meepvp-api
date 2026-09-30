@@ -1,4 +1,4 @@
-# Assign this service to the existing MeppVP project in the Render dashboard.
+# Assign this service to the existing MeepVP project in the Render dashboard.
 # PostgreSQL is hosted on Neon; this Blueprint only creates the Go API.
 services:
   - type: web

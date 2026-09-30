@@ -1,4 +1,4 @@
-# Foundation backend in MeppVP
+# Foundation backend in MeepVP
 
 Adapted from [decoda-ar/foundation](https://github.com/decoda-ar/foundation),
 commit `16c9c67`. Foundation itself remains unchanged. The mobile application

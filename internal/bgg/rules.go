@@ -107,6 +107,9 @@ func (c *Client) readXML(ctx context.Context, path string, query url.Values, tar
 	if response.StatusCode == http.StatusAccepted {
 		return response.StatusCode, retryAfter(response), nil
 	}
+	if response.StatusCode == http.StatusTooManyRequests {
+		return 0, 0, &RateLimitError{RetryAfterSeconds: retryAfter(response)}
+	}
 	if response.StatusCode != http.StatusOK {
 		return 0, 0, fmt.Errorf("BGG %s request failed with status %d", strings.TrimPrefix(path, "/"), response.StatusCode)
 	}

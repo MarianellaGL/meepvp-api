@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 	"tablescore-api/models"
 
@@ -193,7 +194,7 @@ func (s *PostgresStore) ActiveSessionByTable(code string) (domain.ScoreSession, 
 	return session, json.Unmarshal(payload, &session)
 }
 
-func (s *PostgresStore) AddPlayer(sessionID, name string) (domain.ScoreSession, error) {
+func (s *PostgresStore) AddPlayer(sessionID, name, userID string) (domain.ScoreSession, error) {
 	name = strings.TrimSpace(name)
 	if name == "" {
 		return domain.ScoreSession{}, ErrValidation
@@ -217,8 +218,32 @@ func (s *PostgresStore) AddPlayer(sessionID, name string) (domain.ScoreSession, 
 	if session.Status != "active" {
 		return domain.ScoreSession{}, ErrValidation
 	}
+	if userID != "" {
+		var existingPlayerID string
+		err := tx.QueryRow(`SELECT player_id FROM user_game_sessions WHERE user_id = $1 AND session_id = $2`, userID, sessionID).Scan(&existingPlayerID)
+		if err != nil && err != sql.ErrNoRows {
+			return domain.ScoreSession{}, err
+		}
+		if err == nil {
+			for _, player := range session.Players {
+				if player.ID == existingPlayerID && strings.EqualFold(player.Name, name) {
+					return session, tx.Commit()
+				}
+			}
+			return domain.ScoreSession{}, ErrConflict
+		}
+	}
 	for _, player := range session.Players {
 		if strings.EqualFold(player.Name, name) {
+			if userID != "" {
+				if _, err := tx.Exec(`INSERT INTO user_game_sessions (user_id, session_id, player_id) VALUES ($1, $2, $3)`, userID, sessionID, player.ID); err != nil {
+					var pgErr *pgconn.PgError
+					if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+						return domain.ScoreSession{}, ErrConflict
+					}
+					return domain.ScoreSession{}, err
+				}
+			}
 			return session, tx.Commit()
 		}
 	}
@@ -232,6 +257,15 @@ func (s *PostgresStore) AddPlayer(sessionID, name string) (domain.ScoreSession, 
 	payload, _ = json.Marshal(session)
 	if _, err := tx.Exec(`UPDATE score_sessions SET data = $1 WHERE id = $2`, payload, sessionID); err != nil {
 		return domain.ScoreSession{}, err
+	}
+	if userID != "" {
+		if _, err := tx.Exec(`INSERT INTO user_game_sessions (user_id, session_id, player_id) VALUES ($1, $2, $3)`, userID, sessionID, player.ID); err != nil {
+			var pgErr *pgconn.PgError
+			if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+				return domain.ScoreSession{}, ErrConflict
+			}
+			return domain.ScoreSession{}, err
+		}
 	}
 	return session, tx.Commit()
 }
@@ -536,6 +570,71 @@ func (s *PostgresStore) ListScheduledGames(tableCode, hostToken string) ([]domai
 		games = append(games, game)
 	}
 	return games, rows.Err()
+}
+
+func (s *PostgresStore) UpdateScheduledGame(id, hostToken string, input domain.ScheduledGame) (domain.ScheduledGame, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return domain.ScheduledGame{}, err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var payload []byte
+	var token string
+	if err := tx.QueryRow(`SELECT sg.data, gt.host_token FROM scheduled_games sg JOIN game_tables gt ON gt.code = sg.table_code WHERE sg.id = $1 FOR UPDATE OF sg`, id).Scan(&payload, &token); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.ScheduledGame{}, ErrNotFound
+		}
+		return domain.ScheduledGame{}, err
+	}
+	if token != hostToken {
+		return domain.ScheduledGame{}, ErrForbidden
+	}
+	var game domain.ScheduledGame
+	if err := json.Unmarshal(payload, &game); err != nil {
+		return domain.ScheduledGame{}, err
+	}
+	if game.SessionID != "" {
+		return domain.ScheduledGame{}, ErrConflict
+	}
+	if err := prepareScheduledGame(&input); err != nil {
+		return domain.ScheduledGame{}, err
+	}
+	game.GameName, game.ScheduledAt, game.Players = input.GameName, input.ScheduledAt, input.Players
+	payload, _ = json.Marshal(game)
+	if _, err := tx.Exec(`UPDATE scheduled_games SET data = $1, scheduled_at = $2 WHERE id = $3`, payload, game.ScheduledAt, id); err != nil {
+		return domain.ScheduledGame{}, err
+	}
+	return game, tx.Commit()
+}
+
+func (s *PostgresStore) DeleteScheduledGame(id, hostToken string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	var payload []byte
+	var token string
+	if err := tx.QueryRow(`SELECT sg.data, gt.host_token FROM scheduled_games sg JOIN game_tables gt ON gt.code = sg.table_code WHERE sg.id = $1 FOR UPDATE OF sg`, id).Scan(&payload, &token); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrNotFound
+		}
+		return err
+	}
+	if token != hostToken {
+		return ErrForbidden
+	}
+	var game domain.ScheduledGame
+	if err := json.Unmarshal(payload, &game); err != nil {
+		return err
+	}
+	if game.SessionID != "" {
+		return ErrConflict
+	}
+	if _, err := tx.Exec(`DELETE FROM scheduled_games WHERE id = $1`, id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }
 
 func (s *PostgresStore) SetScheduledGameRule(id, hostToken, ruleID string) (domain.ScheduledGame, error) {

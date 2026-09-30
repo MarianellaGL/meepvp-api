@@ -51,6 +51,72 @@ func (s *PostgresStore) DeleteAuthSession(tokenHash string) error {
 	return err
 }
 
+func (s *PostgresStore) LinkUserTable(userID, tableCode string) error {
+	tableCode = strings.ToUpper(tableCode)
+	result, err := s.db.Exec(`INSERT INTO user_game_tables (table_code, user_id) VALUES ($1, $2) ON CONFLICT (table_code) DO NOTHING`, tableCode, userID)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23503" {
+			return ErrNotFound
+		}
+		return err
+	}
+	if count, _ := result.RowsAffected(); count > 0 {
+		return nil
+	}
+	var owner string
+	if err := s.db.QueryRow(`SELECT user_id FROM user_game_tables WHERE table_code = $1`, tableCode).Scan(&owner); err != nil {
+		return err
+	}
+	if owner != userID {
+		return ErrConflict
+	}
+	return nil
+}
+
+func (s *PostgresStore) ListUserTables(userID string) ([]domain.Table, error) {
+	rows, err := s.db.Query(`SELECT t.data, t.host_token FROM user_game_tables ut JOIN game_tables t ON t.code = ut.table_code WHERE ut.user_id = $1 ORDER BY t.created_at DESC`, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	tables := []domain.Table{}
+	for rows.Next() {
+		var payload []byte
+		var token string
+		if err := rows.Scan(&payload, &token); err != nil {
+			return nil, err
+		}
+		var table domain.Table
+		if err := json.Unmarshal(payload, &table); err != nil {
+			return nil, err
+		}
+		table.HostToken = token
+		tables = append(tables, table)
+	}
+	return tables, rows.Err()
+}
+
+func (s *PostgresStore) SaveUserAvatar(userID string, data []byte, contentType string) error {
+	_, err := s.db.Exec(`INSERT INTO user_avatars (user_id, image_data, content_type, updated_at) VALUES ($1, $2, $3, now()) ON CONFLICT (user_id) DO UPDATE SET image_data = EXCLUDED.image_data, content_type = EXCLUDED.content_type, updated_at = now()`, userID, data, contentType)
+	return err
+}
+
+func (s *PostgresStore) GetUserAvatar(userID string) ([]byte, string, error) {
+	var data []byte
+	var contentType string
+	err := s.db.QueryRow(`SELECT image_data, content_type FROM user_avatars WHERE user_id = $1`, userID).Scan(&data, &contentType)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, "", ErrNotFound
+	}
+	return data, contentType, err
+}
+
+func (s *PostgresStore) DeleteUserAvatar(userID string) error {
+	_, err := s.db.Exec(`DELETE FROM user_avatars WHERE user_id = $1`, userID)
+	return err
+}
+
 func (s *PostgresStore) LinkUserSession(userID, sessionID, playerID string) error {
 	var payload []byte
 	err := s.db.QueryRow(`SELECT data FROM score_sessions WHERE id = $1`, sessionID).Scan(&payload)

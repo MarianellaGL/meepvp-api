@@ -33,8 +33,13 @@ func (a *API) Handler() http.Handler {
 	auth.POST("/logout", gin.WrapF(a.logOut))
 	v1.GET("/me", gin.WrapF(a.getMe))
 	v1.GET("/me/sessions", gin.WrapF(a.getMySessions))
+	v1.GET("/me/tables", gin.WrapF(a.getMyTables))
+	v1.GET("/me/avatar", gin.WrapF(a.getMyAvatar))
+	v1.PUT("/me/avatar", gin.WrapF(a.saveMyAvatar))
+	v1.DELETE("/me/avatar", gin.WrapF(a.deleteMyAvatar))
 	v1.GET("/me/stats", gin.WrapF(a.getMyStats))
 	v1.POST("/me/claim-session", gin.WrapF(a.claimSession))
+	v1.POST("/me/claim-table", gin.WrapF(a.claimTable))
 
 	v1.POST("/tables", gin.WrapF(a.createTable))
 	v1.GET("/tables/:code/current-session", gin.WrapF(a.currentTableSession))
@@ -43,6 +48,8 @@ func (a *API) Handler() http.Handler {
 	v1.POST("/tables/:code/scheduled-games", gin.WrapF(a.scheduledGames))
 	v1.PATCH("/scheduled-games/:id/rule", gin.WrapF(a.setScheduledGameRule))
 	v1.PATCH("/scheduled-games/:id/session", gin.WrapF(a.setScheduledGameSession))
+	v1.PUT("/scheduled-games/:id", gin.WrapF(a.updateScheduledGame))
+	v1.DELETE("/scheduled-games/:id", gin.WrapF(a.deleteScheduledGame))
 
 	v1.POST("/scoring-rules", gin.WrapF(a.createRule))
 	v1.GET("/scoring-rules", func(c *gin.Context) { a.listRules(c.Writer) })

@@ -76,7 +76,7 @@ func (a *API) getBGGCollection(w http.ResponseWriter, r *http.Request) {
 	username := strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/bgg/collections/")
 	collection, err := a.bgg.Collection(r.Context(), username)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeBGGError(w, err)
 		return
 	}
 	status := http.StatusOK
@@ -99,7 +99,7 @@ func (a *API) getBGGRules(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := a.bgg.Rules(r.Context(), gameID)
 	if err != nil {
-		writeError(w, http.StatusBadGateway, err.Error())
+		writeBGGError(w, err)
 		return
 	}
 	status := http.StatusOK
@@ -109,6 +109,16 @@ func (a *API) getBGGRules(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, status, result)
 }
 
+func writeBGGError(w http.ResponseWriter, err error) {
+	var limit *bgg.RateLimitError
+	if errors.As(err, &limit) {
+		w.Header().Set("Retry-After", strconv.Itoa(limit.RetryAfterSeconds))
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{"error": "BGG is limiting requests", "retryAfterSeconds": limit.RetryAfterSeconds})
+		return
+	}
+	writeError(w, http.StatusBadGateway, err.Error())
+}
+
 func (a *API) createTable(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		Name string `json:"name"`
@@ -116,12 +126,23 @@ func (a *API) createTable(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
+	user, authenticated, err := a.optionalUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid session")
+		return
+	}
 	table, err := a.store.CreateTable(input.Name)
 	if err != nil {
 		writeStoreError(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"code": table.Code, "name": table.Name, "hostToken": table.HostToken, "createdAt": table.CreatedAt})
+	if authenticated {
+		if err := a.store.LinkUserTable(user.ID, table.Code); err != nil {
+			writeStoreError(w, err)
+			return
+		}
+	}
+	writeJSON(w, http.StatusCreated, tableWithToken(table))
 }
 
 func (a *API) currentTableSession(w http.ResponseWriter, r *http.Request) {
@@ -294,6 +315,29 @@ func (a *API) setScheduledGameSession(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, game)
 }
 
+func (a *API) updateScheduledGame(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/scheduled-games/")
+	var input domain.ScheduledGame
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	game, err := a.store.UpdateScheduledGame(id, r.Header.Get("X-Table-Token"), input)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, game)
+}
+
+func (a *API) deleteScheduledGame(w http.ResponseWriter, r *http.Request) {
+	id := strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/scheduled-games/")
+	if err := a.store.DeleteScheduledGame(id, r.Header.Get("X-Table-Token")); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (a *API) getSession(w http.ResponseWriter, r *http.Request) {
 	id := strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/sessions/")
 	session, err := a.store.GetSession(id)
@@ -312,7 +356,16 @@ func (a *API) addPlayer(w http.ResponseWriter, r *http.Request) {
 	if !decodeJSON(w, r, &input) {
 		return
 	}
-	session, err := a.store.AddPlayer(id, input.Name)
+	user, authenticated, err := a.optionalUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid session")
+		return
+	}
+	userID := ""
+	if authenticated {
+		userID = user.ID
+	}
+	session, err := a.store.AddPlayer(id, input.Name, userID)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -476,41 +529,11 @@ func (a *API) getBoardPhoto(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *API) createPDFImport(w http.ResponseWriter, r *http.Request) {
-	parts := strings.Split(path.Clean(r.URL.Path), "/")
-	if len(parts) != 5 {
-		writeError(w, http.StatusNotFound, "route not found")
-		return
-	}
-	if err := r.ParseMultipartForm(20 << 20); err != nil {
-		writeError(w, http.StatusBadRequest, "a PDF file up to 20 MB is required")
-		return
-	}
-	file, header, err := r.FormFile("file")
-	if err != nil {
-		writeError(w, http.StatusBadRequest, "file is required")
-		return
-	}
-	defer func() { _ = file.Close() }()
-	if !strings.HasSuffix(strings.ToLower(header.Filename), ".pdf") {
-		writeError(w, http.StatusBadRequest, "file must be a PDF")
-		return
-	}
-	job, err := a.store.CreatePDFImport(parts[3], header.Filename)
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusAccepted, job)
+	writeError(w, http.StatusGone, "legacy PDF import is unavailable; use /v1/pdf/extract")
 }
 
 func (a *API) getPDFImport(w http.ResponseWriter, r *http.Request) {
-	id := strings.TrimPrefix(path.Clean(r.URL.Path), "/v1/pdf-imports/")
-	job, err := a.store.GetPDFImport(id)
-	if err != nil {
-		writeStoreError(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, job)
+	writeError(w, http.StatusGone, "legacy PDF import is unavailable; use /v1/pdf/extract")
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

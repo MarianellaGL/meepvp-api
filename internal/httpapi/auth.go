@@ -7,6 +7,7 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"errors"
+	"io"
 	"net/http"
 	"regexp"
 	"strings"
@@ -165,6 +166,73 @@ func (a *API) getMe(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+const maxAvatarBytes = 5 << 20
+
+func (a *API) getMyAvatar(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.requireUser(w, r)
+	if !ok {
+		return
+	}
+	data, contentType, err := a.store.GetUserAvatar(user.ID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "no-store")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+
+func (a *API) saveMyAvatar(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.requireUser(w, r)
+	if !ok {
+		return
+	}
+	r.Body = http.MaxBytesReader(w, r.Body, maxAvatarBytes+(1<<20))
+	if err := r.ParseMultipartForm(maxAvatarBytes); err != nil {
+		writeError(w, http.StatusBadRequest, "an image up to 5 MB is required")
+		return
+	}
+	if r.MultipartForm != nil {
+		defer func() { _ = r.MultipartForm.RemoveAll() }()
+	}
+	file, _, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file is required")
+		return
+	}
+	defer func() { _ = file.Close() }()
+	data, err := io.ReadAll(io.LimitReader(file, maxAvatarBytes+1))
+	if err != nil || len(data) == 0 || len(data) > maxAvatarBytes {
+		writeError(w, http.StatusBadRequest, "an image up to 5 MB is required")
+		return
+	}
+	contentType := http.DetectContentType(data)
+	if contentType != "image/jpeg" && contentType != "image/png" && contentType != "image/webp" {
+		writeError(w, http.StatusBadRequest, "JPEG, PNG or WebP image required")
+		return
+	}
+	if err := a.store.SaveUserAvatar(user.ID, data, contentType); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
+}
+
+func (a *API) deleteMyAvatar(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.requireUser(w, r)
+	if !ok {
+		return
+	}
+	if err := a.store.DeleteUserAvatar(user.ID); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 type mySessionResponse struct {
 	sessionResponse
 	GameName   string `json:"gameName"`
@@ -202,6 +270,53 @@ func (a *API) getMySessions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, sessions)
+}
+
+func tableWithToken(table domain.Table) map[string]any {
+	return map[string]any{"code": table.Code, "name": table.Name, "hostToken": table.HostToken, "createdAt": table.CreatedAt}
+}
+
+func (a *API) getMyTables(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.requireUser(w, r)
+	if !ok {
+		return
+	}
+	tables, err := a.store.ListUserTables(user.ID)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	result := make([]map[string]any, 0, len(tables))
+	for _, table := range tables {
+		result = append(result, tableWithToken(table))
+	}
+	w.Header().Set("Cache-Control", "no-store")
+	writeJSON(w, http.StatusOK, result)
+}
+
+func (a *API) claimTable(w http.ResponseWriter, r *http.Request) {
+	user, ok := a.requireUser(w, r)
+	if !ok {
+		return
+	}
+	var input struct{ Code, HostToken string }
+	if !decodeJSON(w, r, &input) {
+		return
+	}
+	table, err := a.store.GetTable(input.Code)
+	if err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	if subtle.ConstantTimeCompare([]byte(table.HostToken), []byte(input.HostToken)) != 1 {
+		writeError(w, http.StatusForbidden, "host token required")
+		return
+	}
+	if err := a.store.LinkUserTable(user.ID, table.Code); err != nil {
+		writeStoreError(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, tableWithToken(table))
 }
 
 func (a *API) getMyStats(w http.ResponseWriter, r *http.Request) {
@@ -264,6 +379,10 @@ func (a *API) claimSession(w http.ResponseWriter, r *http.Request) {
 	}
 	if subtle.ConstantTimeCompare([]byte(table.HostToken), []byte(input.HostToken)) != 1 {
 		writeError(w, http.StatusForbidden, "host token required")
+		return
+	}
+	if err := a.store.LinkUserTable(user.ID, table.Code); err != nil {
+		writeStoreError(w, err)
 		return
 	}
 	if err := a.store.LinkUserSession(user.ID, input.SessionID, input.PlayerID); err != nil {

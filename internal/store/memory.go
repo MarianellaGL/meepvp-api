@@ -32,6 +32,8 @@ type MemoryStore struct {
 	passwords    map[string]string
 	authSessions map[string]memoryAuthSession
 	userSessions map[string]map[string]string
+	userTables   map[string]string
+	userAvatars  map[string]memoryBoardPhoto
 }
 
 type memoryAuthSession struct {
@@ -49,7 +51,7 @@ func NewMemoryStore() *MemoryStore {
 		rulebooks: map[string]domain.Rulebook{},
 		tables:    map[string]domain.Table{}, rules: map[string]domain.ScoringRule{},
 		sessions: map[string]domain.ScoreSession{}, boardPhotos: map[string]memoryBoardPhoto{}, imports: map[string]domain.PDFImport{}, plans: map[string]domain.ScheduledGame{},
-		users: map[string]domain.User{}, passwords: map[string]string{}, authSessions: map[string]memoryAuthSession{}, userSessions: map[string]map[string]string{},
+		users: map[string]domain.User{}, passwords: map[string]string{}, authSessions: map[string]memoryAuthSession{}, userSessions: map[string]map[string]string{}, userTables: map[string]string{}, userAvatars: map[string]memoryBoardPhoto{},
 	}
 }
 
@@ -194,7 +196,7 @@ func (s *MemoryStore) ActiveSessionByTable(code string) (domain.ScoreSession, er
 	return latest, nil
 }
 
-func (s *MemoryStore) AddPlayer(sessionID, name string) (domain.ScoreSession, error) {
+func (s *MemoryStore) AddPlayer(sessionID, name, userID string) (domain.ScoreSession, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	session, ok := s.sessions[sessionID]
@@ -205,8 +207,27 @@ func (s *MemoryStore) AddPlayer(sessionID, name string) (domain.ScoreSession, er
 	if name == "" || session.Status != "active" {
 		return domain.ScoreSession{}, ErrValidation
 	}
+	if userID != "" && s.userSessions[userID][sessionID] != "" {
+		for _, player := range session.Players {
+			if player.ID == s.userSessions[userID][sessionID] && strings.EqualFold(player.Name, name) {
+				return session, nil
+			}
+		}
+		return domain.ScoreSession{}, ErrConflict
+	}
 	for _, player := range session.Players {
 		if strings.EqualFold(player.Name, name) {
+			if userID != "" {
+				for ownerID, memberships := range s.userSessions {
+					if memberships[sessionID] == player.ID && ownerID != userID {
+						return domain.ScoreSession{}, ErrConflict
+					}
+				}
+				if s.userSessions[userID] == nil {
+					s.userSessions[userID] = map[string]string{}
+				}
+				s.userSessions[userID][sessionID] = player.ID
+			}
 			return session, nil
 		}
 	}
@@ -218,6 +239,12 @@ func (s *MemoryStore) AddPlayer(sessionID, name string) (domain.ScoreSession, er
 	session.Values[player.ID] = map[string]int{}
 	session.LastModified = time.Now().UTC()
 	s.sessions[sessionID] = session
+	if userID != "" {
+		if s.userSessions[userID] == nil {
+			s.userSessions[userID] = map[string]string{}
+		}
+		s.userSessions[userID][sessionID] = player.ID
+	}
 	return session, nil
 }
 
@@ -463,6 +490,44 @@ func (s *MemoryStore) ListScheduledGames(tableCode, hostToken string) ([]domain.
 	}
 	sort.Slice(games, func(i, j int) bool { return games[i].ScheduledAt.Before(games[j].ScheduledAt) })
 	return games, nil
+}
+
+func (s *MemoryStore) UpdateScheduledGame(id, hostToken string, input domain.ScheduledGame) (domain.ScheduledGame, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	game, ok := s.plans[id]
+	if !ok {
+		return domain.ScheduledGame{}, ErrNotFound
+	}
+	if s.tables[game.TableCode].HostToken != hostToken {
+		return domain.ScheduledGame{}, ErrForbidden
+	}
+	if game.SessionID != "" {
+		return domain.ScheduledGame{}, ErrConflict
+	}
+	if err := prepareScheduledGame(&input); err != nil {
+		return domain.ScheduledGame{}, err
+	}
+	game.GameName, game.ScheduledAt, game.Players = input.GameName, input.ScheduledAt, input.Players
+	s.plans[id] = game
+	return game, nil
+}
+
+func (s *MemoryStore) DeleteScheduledGame(id, hostToken string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	game, ok := s.plans[id]
+	if !ok {
+		return ErrNotFound
+	}
+	if s.tables[game.TableCode].HostToken != hostToken {
+		return ErrForbidden
+	}
+	if game.SessionID != "" {
+		return ErrConflict
+	}
+	delete(s.plans, id)
+	return nil
 }
 
 func (s *MemoryStore) SetScheduledGameRule(id, hostToken, ruleID string) (domain.ScheduledGame, error) {

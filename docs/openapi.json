@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "MeppVP API",
+    "title": "MeepVP API",
     "version": "0.1.0",
     "description": "API Go de partidas y puntuación. /v1 mantiene la app móvil; /api agrega autenticación Foundation y administración. Usá Authorize para Bearer o X-Table-Token. Las pruebas modifican datos reales del servidor seleccionado."
   },
@@ -256,6 +256,48 @@
         ]
       }
     },
+    "/v1/me/tables": {
+      "get": {
+        "operationId": "get_v1_me_tables",
+        "tags": ["Cuentas móviles"],
+        "summary": "Listar mis mesas y recuperar sus tokens de anfitrión",
+        "responses": {
+          "200": {"description": "Mesas de la cuenta", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/CreatedTable"}}}}},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        },
+        "security": [{"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}]
+      }
+    },
+    "/v1/me/avatar": {
+      "get": {
+        "operationId": "get_v1_me_avatar",
+        "tags": ["Cuentas móviles"],
+        "summary": "Descargar mi avatar",
+        "responses": {
+          "200": {"description": "Avatar", "content": {"image/jpeg": {"schema": {"type": "string", "format": "binary"}}, "image/png": {"schema": {"type": "string", "format": "binary"}}, "image/webp": {"schema": {"type": "string", "format": "binary"}}}},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        },
+        "security": [{"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}]
+      },
+      "put": {
+        "operationId": "put_v1_me_avatar",
+        "tags": ["Cuentas móviles"],
+        "summary": "Guardar mi avatar (JPEG, PNG o WebP; máximo 5 MB)",
+        "requestBody": {"required": true, "content": {"multipart/form-data": {"schema": {"type": "object", "properties": {"file": {"type": "string", "format": "binary"}}, "required": ["file"]}}}},
+        "responses": {
+          "200": {"description": "Guardado", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Status"}}}},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        },
+        "security": [{"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}]
+      },
+      "delete": {
+        "operationId": "delete_v1_me_avatar",
+        "tags": ["Cuentas móviles"],
+        "summary": "Borrar mi avatar",
+        "responses": {"204": {"description": "Avatar borrado"}, "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}},
+        "security": [{"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}]
+      }
+    },
     "/v1/me/stats": {
       "get": {
         "operationId": "get_v1_me_stats",
@@ -364,6 +406,19 @@
             "AccessCookie": []
           }
         ]
+      }
+    },
+    "/v1/me/claim-table": {
+      "post": {
+        "operationId": "post_v1_me_claim_table",
+        "tags": ["Cuentas móviles"],
+        "summary": "Vincular una mesa anónima a mi cuenta",
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "properties": {"code": {"type": "string"}, "hostToken": {"type": "string"}}, "required": ["code", "hostToken"]}}}},
+        "responses": {
+          "200": {"description": "Mesa vinculada", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/CreatedTable"}}}},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        },
+        "security": [{"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}]
       }
     },
     "/v1/tables": {
@@ -629,6 +684,31 @@
             "TableToken": []
           }
         ]
+      }
+    },
+    "/v1/scheduled-games/{id}": {
+      "put": {
+        "operationId": "put_v1_scheduled_games_id",
+        "tags": ["Agenda"],
+        "summary": "Cambiar juego, fecha y jugadores antes de empezar",
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ScheduledGameUpdateInput"}}}},
+        "responses": {
+          "200": {"description": "Juego actualizado", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/ScheduledGame"}}}},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        },
+        "security": [{"TableToken": []}]
+      },
+      "delete": {
+        "operationId": "delete_v1_scheduled_games_id",
+        "tags": ["Agenda"],
+        "summary": "Cancelar un juego programado antes de empezar",
+        "parameters": [{"name": "id", "in": "path", "required": true, "schema": {"type": "string"}}],
+        "responses": {
+          "204": {"description": "Juego cancelado"},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        },
+        "security": [{"TableToken": []}]
       }
     },
     "/v1/scheduled-games/{id}/rule": {
@@ -930,7 +1010,7 @@
         "tags": [
           "Partidas"
         ],
-        "summary": "Agregar jugador",
+        "summary": "Unirse como jugador",
         "responses": {
           "200": {
             "description": "Success",
@@ -980,7 +1060,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Anónimo: crea o reutiliza el jugador de ese nombre. Con Bearer válido: vincula el jugador a la cuenta; otro usuario no puede reclamarlo."
       }
     },
     "/v1/sessions/{id}/scores": {
@@ -1535,14 +1616,15 @@
         "tags": [
           "PDF"
         ],
-        "summary": "Registrar importación de PDF",
+        "summary": "Ruta antigua de importación de PDF (descontinuada)",
+        "deprecated": true,
         "responses": {
-          "202": {
-            "description": "Success",
+          "410": {
+            "description": "Usar /v1/pdf/extract",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PDFImport"
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1587,7 +1669,7 @@
             }
           }
         },
-        "description": "Registra metadatos con estado queued; este endpoint no procesa el PDF. Para extraer contenido usar /v1/pdf/extract."
+        "description": "La cola antigua no tenía un procesador. Esta ruta devuelve 410; usar /v1/pdf/extract."
       }
     },
     "/v1/pdf-imports/{id}": {
@@ -1596,14 +1678,15 @@
         "tags": [
           "PDF"
         ],
-        "summary": "Consultar importación registrada",
+        "summary": "Ruta antigua de estado de importación (descontinuada)",
+        "deprecated": true,
         "responses": {
-          "200": {
-            "description": "Success",
+          "410": {
+            "description": "Usar /v1/pdf/extract",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PDFImport"
+                  "$ref": "#/components/schemas/Error"
                 }
               }
             }
@@ -1668,6 +1751,10 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "BGG limitó solicitudes; respetar Retry-After",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
           }
         },
         "parameters": [
@@ -1719,6 +1806,10 @@
                 }
               }
             }
+          },
+          "429": {
+            "description": "BGG limitó solicitudes; respetar Retry-After",
+            "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}
           }
         },
         "parameters": [
@@ -3662,6 +3753,15 @@
           "gameName",
           "scheduledAt"
         ]
+      },
+      "ScheduledGameUpdateInput": {
+        "type": "object",
+        "properties": {
+          "gameName": {"type": "string"},
+          "scheduledAt": {"type": "string", "format": "date-time"},
+          "players": {"type": "array", "items": {"type": "string"}}
+        },
+        "required": ["gameName", "scheduledAt"]
       },
       "LegacyCredentials": {
         "type": "object",

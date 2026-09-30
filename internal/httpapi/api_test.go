@@ -416,6 +416,31 @@ func TestBGGRulesRoute(t *testing.T) {
 	}
 }
 
+func TestBGGRateLimitIsExposedToClient(t *testing.T) {
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "17")
+		w.WriteHeader(http.StatusTooManyRequests)
+	}))
+	defer server.Close()
+	h := httpapi.New(store.NewMemoryStore(), bgg.New(server.URL, "", server.Client())).Handler()
+	for _, endpoint := range []string{"/v1/bgg/collections/ana", "/v1/bgg/games/266192/rules"} {
+		response := request(t, h, http.MethodGet, endpoint, nil, "")
+		if response.Code != http.StatusTooManyRequests || response.Header().Get("Retry-After") != "17" {
+			t.Fatalf("rate limit %s: %d, retry %q", endpoint, response.Code, response.Header().Get("Retry-After"))
+		}
+	}
+}
+
+func TestLegacyPDFImportDoesNotQueueUnprocessableJobs(t *testing.T) {
+	h := httpapi.New(store.NewMemoryStore()).Handler()
+	if response := request(t, h, http.MethodPost, "/v1/scoring-rules/example/pdf-imports", nil, ""); response.Code != http.StatusGone {
+		t.Fatalf("legacy PDF upload still accepts jobs: %d", response.Code)
+	}
+	if response := request(t, h, http.MethodGet, "/v1/pdf-imports/example", nil, ""); response.Code != http.StatusGone {
+		t.Fatalf("legacy PDF status still appears pending: %d", response.Code)
+	}
+}
+
 func TestCommunityScoringRulesOnlyShowSharedTemplates(t *testing.T) {
 	h := httpapi.New(store.NewMemoryStore()).Handler()
 	signup := request(t, h, http.MethodPost, "/v1/auth/signup", map[string]string{"username": "ana", "password": "correct horse battery staple"}, "")
@@ -481,6 +506,21 @@ func TestScheduleGameWithoutScoringSheetAndAssignLater(t *testing.T) {
 	if game.GameName != "Wingspan" || game.RuleID != "" || len(game.Players) != 2 {
 		t.Fatalf("unexpected scheduled game: %#v", game)
 	}
+	changed := request(t, h, http.MethodPut, "/v1/scheduled-games/"+game.ID, map[string]any{"gameName": "Wingspan nuevo", "scheduledAt": time.Now().Add(72 * time.Hour).UTC().Format(time.RFC3339), "players": []string{"Ana"}}, owner.HostToken)
+	if changed.Code != http.StatusOK {
+		t.Fatalf("edit schedule: %d %s", changed.Code, changed.Body.String())
+	}
+	var edited struct {
+		GameName string
+		Players  []string
+	}
+	decode(t, changed, &edited)
+	if edited.GameName != "Wingspan nuevo" || len(edited.Players) != 1 {
+		t.Fatalf("schedule edit not saved: %#v", edited)
+	}
+	if denied := request(t, h, http.MethodDelete, "/v1/scheduled-games/"+game.ID, nil, "wrong"); denied.Code != http.StatusForbidden {
+		t.Fatalf("another user canceled schedule: %d", denied.Code)
+	}
 	denied := request(t, h, http.MethodGet, "/v1/tables/"+owner.Code+"/scheduled-games", nil, "wrong")
 	if denied.Code != http.StatusForbidden {
 		t.Fatalf("plan list exposed without host token: %d", denied.Code)
@@ -507,6 +547,9 @@ func TestScheduleGameWithoutScoringSheetAndAssignLater(t *testing.T) {
 	decode(t, started, &startedGame)
 	if startedGame.SessionID != sessionBody.ID {
 		t.Fatalf("game was not started: %#v", startedGame)
+	}
+	if response := request(t, h, http.MethodDelete, "/v1/scheduled-games/"+game.ID, nil, owner.HostToken); response.Code != http.StatusConflict {
+		t.Fatalf("started game was canceled: %d", response.Code)
 	}
 }
 

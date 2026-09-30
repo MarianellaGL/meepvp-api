@@ -39,6 +39,12 @@ type CollectionResult struct {
 	Games             []CollectionGame `json:"games,omitempty"`
 }
 
+type RateLimitError struct {
+	RetryAfterSeconds int
+}
+
+func (e *RateLimitError) Error() string { return "BGG rate limit reached" }
+
 func NewFromEnvironment() *Client {
 	baseURL := strings.TrimRight(os.Getenv("BGG_API_BASE_URL"), "/")
 	if baseURL == "" {
@@ -87,6 +93,9 @@ func (c *Client) Collection(ctx context.Context, username string) (CollectionRes
 	if response.StatusCode == http.StatusAccepted {
 		return CollectionResult{Status: "processing", RetryAfterSeconds: retryAfter(response)}, nil
 	}
+	if response.StatusCode == http.StatusTooManyRequests {
+		return CollectionResult{}, &RateLimitError{RetryAfterSeconds: retryAfter(response)}
+	}
 	if response.StatusCode != http.StatusOK {
 		return CollectionResult{}, fmt.Errorf("BGG collection request failed with status %d", response.StatusCode)
 	}
@@ -105,6 +114,11 @@ func (c *Client) Collection(ctx context.Context, username string) (CollectionRes
 func retryAfter(response *http.Response) int {
 	if value, err := time.ParseDuration(response.Header.Get("Retry-After") + "s"); err == nil && value > 0 {
 		return int(value.Seconds())
+	}
+	if until, err := http.ParseTime(response.Header.Get("Retry-After")); err == nil {
+		if seconds := int(time.Until(until).Seconds()); seconds > 0 {
+			return seconds
+		}
 	}
 	return 5
 }

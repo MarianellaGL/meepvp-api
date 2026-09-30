@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -55,5 +57,34 @@ func TestRankGamesRejectsInventedIDs(t *testing.T) {
 	ordered := client.RankGames(context.Background(), "Dos", games)
 	if ordered[0].BGGID != 1 {
 		t.Fatalf("invented ID changed BGG results: %#v", ordered)
+	}
+}
+
+func TestCodexCLIUsesStructuredOutputForScoring(t *testing.T) {
+	t.Setenv("DATABASE_URL", "do-not-pass-to-ai")
+	bin := filepath.Join(t.TempDir(), "fake-codex")
+	script := `#!/bin/sh
+[ -z "$DATABASE_URL" ] || exit 2
+[ -n "$CODEX_HOME" ] || exit 3
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    printf '%s' '{"found":true,"gameName":"Juego","fields":[{"name":"Monedas","kind":"counter","pointsPerUnit":2}],"notes":[]}' > "$1"
+    exit 0
+  fi
+  shift
+done
+exit 1
+`
+	if err := os.WriteFile(bin, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	client := &Client{provider: "codex-cli", cliPath: bin}
+	suggestion, err := client.SuggestScoring(context.Background(), "Juego", "Cada moneda vale 2 puntos", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suggestion == nil || suggestion.Source != "ai" || suggestion.Fields[0].PointsPerUnit != 2 {
+		t.Fatalf("unexpected suggestion: %#v", suggestion)
 	}
 }

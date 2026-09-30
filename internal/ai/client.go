@@ -1,12 +1,9 @@
 package ai
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -23,6 +20,8 @@ type Client struct {
 	model    string
 	endpoint string
 	http     *http.Client
+	provider string
+	cliPath  string
 }
 
 func NewFromEnvironment() *Client {
@@ -30,11 +29,15 @@ func NewFromEnvironment() *Client {
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
+	provider := strings.TrimSpace(os.Getenv("AI_PROVIDER"))
+	if provider == "codex-cli" {
+		return &Client{provider: provider, cliPath: "codex"}
+	}
 	return &Client{key: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model: model,
 		endpoint: "https://api.openai.com/v1/responses", http: &http.Client{Timeout: 25 * time.Second}}
 }
 
-func (c *Client) Enabled() bool { return c != nil && c.key != "" }
+func (c *Client) Enabled() bool { return c != nil && (c.key != "" || c.provider == "codex-cli") }
 
 type response struct {
 	Status string `json:"status"`
@@ -84,22 +87,8 @@ func (c *Client) SuggestScoring(ctx context.Context, gameHint, extractedText str
 	if err != nil {
 		return nil, err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
+	result, err := c.complete(ctx, payload)
 	if err != nil {
-		return nil, err
-	}
-	req.Header.Set("Authorization", "Bearer "+c.key)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := c.http.Do(req)
-	if err != nil {
-		return nil, err
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("OpenAI returned HTTP %d", res.StatusCode)
-	}
-	var result response
-	if err := json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&result); err != nil {
 		return nil, err
 	}
 	if result.Status != "completed" {
@@ -182,22 +171,8 @@ func (c *Client) RankGames(ctx context.Context, query string, games []bgg.Collec
 		"input":        string(input),
 		"text":         map[string]any{"format": map[string]any{"type": "json_schema", "name": "bgg_ranking", "strict": true, "schema": schema}},
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return games
-	}
-	req.Header.Set("Authorization", "Bearer "+c.key)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := c.http.Do(req)
-	if err != nil {
-		return games
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return games
-	}
-	var result response
-	if json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&result) != nil || result.Status != "completed" {
+	result, err := c.complete(ctx, payload)
+	if err != nil || result.Status != "completed" {
 		return games
 	}
 	byID := make(map[int]bgg.CollectionGame, len(games))
@@ -244,22 +219,8 @@ func (c *Client) AlternateBGGQuery(ctx context.Context, query string) string {
 		"input":        query,
 		"text":         map[string]any{"format": map[string]any{"type": "json_schema", "name": "bgg_query", "strict": true, "schema": schema}},
 	})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
-	if err != nil {
-		return ""
-	}
-	req.Header.Set("Authorization", "Bearer "+c.key)
-	req.Header.Set("Content-Type", "application/json")
-	res, err := c.http.Do(req)
-	if err != nil {
-		return ""
-	}
-	defer res.Body.Close()
-	if res.StatusCode != http.StatusOK {
-		return ""
-	}
-	var result response
-	if json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&result) != nil || result.Status != "completed" {
+	result, err := c.complete(ctx, payload)
+	if err != nil || result.Status != "completed" {
 		return ""
 	}
 	for _, item := range result.Output {

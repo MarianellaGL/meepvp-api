@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"os"
@@ -69,6 +70,7 @@ func ServeWorker(ctx context.Context, socket, cliPath string) error {
 		return err
 	}
 	cli := &Client{provider: "codex-cli", cliPath: cliPath}
+	responses := &Client{key: strings.TrimSpace(os.Getenv("CODEX_API_KEY")), endpoint: "https://api.openai.com/v1/responses", http: &http.Client{Timeout: 25 * time.Second}}
 	server := &http.Server{ReadHeaderTimeout: 5 * time.Second, ReadTimeout: 10 * time.Second, WriteTimeout: 100 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.Method != http.MethodPost || r.URL.Path != "/complete" {
@@ -80,7 +82,7 @@ func ServeWorker(ctx context.Context, socket, cliPath string) error {
 				http.Error(w, "request too large", http.StatusRequestEntityTooLarge)
 				return
 			}
-			result, err := cli.completeCLI(r.Context(), payload)
+			result, err := completeWithFallback(r.Context(), payload, cli, responses)
 			if err != nil {
 				http.Error(w, "AI worker unavailable", http.StatusBadGateway)
 				return
@@ -100,4 +102,21 @@ func ServeWorker(ctx context.Context, socket, cliPath string) error {
 		return nil
 	}
 	return err
+}
+
+func completeWithFallback(ctx context.Context, payload []byte, cli, responses *Client) (response, error) {
+	result, cliErr := cli.completeCLI(ctx, payload)
+	if cliErr == nil {
+		return result, nil
+	}
+	slog.Warn("Codex CLI unavailable; trying Responses API", "error", cliErr)
+	if responses.key == "" {
+		return response{}, cliErr
+	}
+	result, responsesErr := responses.completeResponses(ctx, payload)
+	if responsesErr == nil {
+		return result, nil
+	}
+	slog.Warn("Responses API fallback unavailable", "error", responsesErr)
+	return response{}, fmt.Errorf("AI providers unavailable: Codex CLI: %v; Responses API: %w", cliErr, responsesErr)
 }

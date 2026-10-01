@@ -54,7 +54,9 @@ func (c *Client) completeResponses(ctx context.Context, payload []byte) (respons
 
 func (c *Client) completeCLI(ctx context.Context, payload []byte) (response, error) {
 	var result response
-	ctx, cancel := context.WithTimeout(ctx, 90*time.Second)
+	// Leave enough time for the worker to try the Responses API before its
+	// 100-second HTTP deadline when Codex is slow or unavailable.
+	ctx, cancel := context.WithTimeout(ctx, 55*time.Second)
 	defer cancel()
 	var request struct {
 		Instructions string `json:"instructions"`

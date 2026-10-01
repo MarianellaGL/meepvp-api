@@ -36,6 +36,9 @@ func TestSuggestScoringUsesStructuredOutputAndValidatesProposal(t *testing.T) {
 		if body["store"] != false {
 			t.Fatal("AI response must not be stored")
 		}
+		if instructions, _ := body["instructions"].(string); !strings.Contains(instructions, "nombres de los campos y todas las notas en español") {
+			t.Fatal("AI prompt must translate field names and notes to Spanish")
+		}
 		format := body["text"].(map[string]any)["format"].(map[string]any)
 		if format["type"] != "json_schema" || format["strict"] != true {
 			t.Fatal("structured output missing")
@@ -169,5 +172,26 @@ func TestWorkerFallsBackToResponsesWhenUnavailable(t *testing.T) {
 	suggestion, err := client.SuggestScoring(context.Background(), "Juego", "Cada moneda vale 2 puntos de victoria.", nil)
 	if err != nil || suggestion == nil || len(suggestion.Fields) != 1 {
 		t.Fatalf("fallback suggestion: %#v, %v", suggestion, err)
+	}
+}
+
+func TestWorkerFallsBackToResponsesWhenCodexFails(t *testing.T) {
+	bin := filepath.Join(t.TempDir(), "fake-codex")
+	if err := os.WriteFile(bin, []byte("#!/bin/sh\nexit 1\n"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	cli := &Client{provider: "codex-cli", cliPath: bin}
+	responses := &Client{key: "test-key", endpoint: "https://example.test/v1/responses",
+		http: &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+			if req.Header.Get("Authorization") != "Bearer test-key" {
+				t.Fatal("fallback did not use the worker key")
+			}
+			return modelResponse(`{"found":true,"gameName":"Schotten Totten","fields":[{"name":"Piedras reclamadas","kind":"counter","pointsPerUnit":1}],"notes":["Revisá la condición de victoria."]}`), nil
+		})}}
+	client := &Client{key: "test-key", model: "gpt-4o-mini"}
+	payload, _ := json.Marshal(map[string]any{"model": client.model, "instructions": "Responde en español", "input": "Schotten Totten", "text": map[string]any{"format": map[string]any{"schema": suggestionSchema}}})
+	result, err := completeWithFallback(context.Background(), payload, cli, responses)
+	if err != nil || result.Status != "completed" {
+		t.Fatalf("fallback response: %#v, %v", result, err)
 	}
 }

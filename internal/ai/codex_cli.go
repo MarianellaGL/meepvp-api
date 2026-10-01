@@ -23,8 +23,16 @@ func (c *Client) complete(ctx context.Context, payload []byte) (response, error)
 		return c.completeCLI(ctx, payload)
 	}
 	if c.provider == "codex-worker" {
-		return c.completeWorker(ctx, payload)
+		result, err := c.completeWorker(ctx, payload)
+		if err == nil || c.key == "" {
+			return result, err
+		}
+		return c.completeResponses(ctx, payload)
 	}
+	return c.completeResponses(ctx, payload)
+}
+
+func (c *Client) completeResponses(ctx context.Context, payload []byte) (response, error) {
 	var result response
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.endpoint, bytes.NewReader(payload))
 	if err != nil {

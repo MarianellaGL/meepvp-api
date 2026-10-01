@@ -37,7 +37,9 @@ func NewFromEnvironment() *Client {
 		return &Client{provider: provider, cliPath: "codex"}
 	}
 	if provider == "codex-worker" {
-		return &Client{provider: provider, workerSocket: workerSocketPath()}
+		return &Client{provider: provider, workerSocket: workerSocketPath(),
+			key: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model: model,
+			endpoint: "https://api.openai.com/v1/responses", http: &http.Client{Timeout: 25 * time.Second}}
 	}
 	return &Client{key: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model: model,
 		endpoint: "https://api.openai.com/v1/responses", http: &http.Client{Timeout: 25 * time.Second}}

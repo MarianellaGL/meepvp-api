@@ -156,3 +156,18 @@ exit 1
 		t.Fatal(err)
 	}
 }
+
+func TestWorkerFallsBackToResponsesWhenUnavailable(t *testing.T) {
+	client := &Client{provider: "codex-worker", workerSocket: filepath.Join(t.TempDir(), "missing.sock"),
+		key: "fallback-key", model: "gpt-4o-mini", endpoint: "https://example.test/v1/responses"}
+	client.http = &http.Client{Transport: roundTripFunc(func(req *http.Request) (*http.Response, error) {
+		if req.Header.Get("Authorization") != "Bearer fallback-key" {
+			t.Fatal("fallback did not use the server key")
+		}
+		return modelResponse(`{"found":true,"gameName":"Juego","fields":[{"name":"Monedas","kind":"counter","pointsPerUnit":2}],"notes":[]}`), nil
+	})}
+	suggestion, err := client.SuggestScoring(context.Background(), "Juego", "Cada moneda vale 2 puntos de victoria.", nil)
+	if err != nil || suggestion == nil || len(suggestion.Fields) != 1 {
+		t.Fatalf("fallback suggestion: %#v, %v", suggestion, err)
+	}
+}

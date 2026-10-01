@@ -158,6 +158,7 @@ BGG endpoints return `429` with `Retry-After` when BGG limits requests. A `202` 
 | --- | --- | --- |
 | `GET` | `/v1/bgg/collections/{username}` | Import a BGG collection; may return `202` while BGG processes it |
 | `GET` | `/v1/bgg/search?query=` | Search actual BGG games; optional AI query correction and ranking |
+| `GET` | `/v1/discovery/search?query=` | Search BGG games, public scoring sheets, and EN rulebooks in one request |
 | `GET` | `/v1/bgg/games/{gameID}/rules` | List the game's Rules forum discussions and links |
 | `GET` | `/v1/rulebooks` | Search EN/FR rulebooks and save catalog metadata |
 | `POST` | `/v1/rulebooks/{id}/extract` | Read a catalog PDF and propose editable scoring fields |
@@ -166,6 +167,14 @@ BGG endpoints return `429` with `Retry-After` when BGG limits requests. A `202` 
 | `POST` | `/v1/ai/scoring-suggestion` | Retry an editable AI scoring proposal from previously extracted rulebook text |
 | `POST` | `/v1/scoring-rules/{ruleID}/pdf-imports` | Deprecated: returns 410; use `/v1/pdf/extract` |
 | `GET` | `/v1/pdf-imports/{id}` | Deprecated: returns 410; use `/v1/pdf/extract` |
+
+`GET /v1/discovery/search?query=Catan` returns `games`, `communityRules`, and
+`rulebooks` in one response. Each list is always present. `unavailableSources`
+identifies sources that failed while other results remain usable;
+`cachedRulebooks` marks catalog fallback. If BGG is still processing, the route
+returns 202 with `status: "processing"`, `retryAfterSeconds`, and any planillas
+or rulebooks already found. The mobile client combines records by BGG ID or
+game name for display. The search is limited to 15 requests/minute/IP.
 
 `GET /v1/rulebooks?query=Catan&language=en` searches rule-book.org and stores
 catalog metadata in PostgreSQL. English and French are supported by the source;

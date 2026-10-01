@@ -1743,6 +1743,21 @@
         ]
       }
     },
+    "/v1/discovery/search": {
+      "get": {
+        "operationId": "get_v1_discovery_search",
+        "tags": ["BoardGameGeek"],
+        "summary": "Buscar juegos, planillas públicas y reglamentos juntos",
+        "description": "Devuelve resultados de cada fuente en una respuesta. unavailableSources identifica fallas parciales; status processing indica que BGG todavía prepara sus resultados.",
+        "parameters": [{"name": "query", "in": "query", "required": true, "schema": {"type": "string", "minLength": 2, "maxLength": 100}}],
+        "responses": {
+          "200": {"description": "Resultados disponibles", "content": {"application/json": {"schema": {"type": "object", "required": ["status", "games", "communityRules", "rulebooks", "cachedRulebooks", "unavailableSources"], "properties": {"status": {"type": "string", "enum": ["ready", "processing"]}, "retryAfterSeconds": {"type": "integer"}, "games": {"type": "array", "items": {"$ref": "#/components/schemas/CollectionGame"}}, "communityRules": {"type": "array", "items": {"$ref": "#/components/schemas/ScoringRule"}}, "rulebooks": {"type": "array", "items": {"$ref": "#/components/schemas/Rulebook"}}, "cachedRulebooks": {"type": "boolean"}, "unavailableSources": {"type": "array", "items": {"type": "string", "enum": ["bgg", "community", "rulebooks"]}}}}}}},
+          "202": {"description": "BGG está procesando la consulta; otras fuentes pueden tener resultados"},
+          "400": {"description": "Consulta inválida"},
+          "502": {"description": "Ninguna fuente está disponible"}
+        }
+      }
+    },
     "/v1/bgg/search": {
       "get": {
         "operationId": "get_v1_bgg_search",

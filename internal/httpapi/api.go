@@ -132,6 +132,24 @@ func (a *API) suggestScoringDraft(w http.ResponseWriter, r *http.Request) {
 	suggestion, err := a.ai.SuggestScoring(r.Context(), input.GameName, input.Text, pdfreader.ScoringExcerpts(input.Text))
 	if err != nil {
 		slog.Warn("AI scoring draft unavailable", "error", err)
+		var providerErr *ai.ProviderError
+		if errors.As(err, &providerErr) {
+			if providerErr.QuotaExhausted() {
+				writeError(w, http.StatusServiceUnavailable, "AI provider quota exhausted")
+				return
+			}
+			if providerErr.StatusCode == http.StatusTooManyRequests {
+				if providerErr.RetryAfterSeconds > 0 {
+					w.Header().Set("Retry-After", strconv.Itoa(providerErr.RetryAfterSeconds))
+				}
+				writeError(w, http.StatusTooManyRequests, "AI provider rate limited")
+				return
+			}
+			if providerErr.StatusCode == http.StatusUnauthorized || providerErr.StatusCode == http.StatusForbidden {
+				writeError(w, http.StatusServiceUnavailable, "AI provider authentication failed")
+				return
+			}
+		}
 		writeError(w, http.StatusBadGateway, "could not generate scoring suggestion")
 		return
 	}

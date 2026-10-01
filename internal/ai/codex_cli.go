@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -46,10 +47,37 @@ func (c *Client) completeResponses(ctx context.Context, payload []byte) (respons
 	}
 	defer func() { _ = res.Body.Close() }()
 	if res.StatusCode != http.StatusOK {
-		return result, fmt.Errorf("OpenAI returned HTTP %d", res.StatusCode)
+		var failure struct {
+			Error struct {
+				Code string `json:"code"`
+				Type string `json:"type"`
+			} `json:"error"`
+		}
+		_ = json.NewDecoder(io.LimitReader(res.Body, 16<<10)).Decode(&failure)
+		retryAfter, _ := strconv.Atoi(res.Header.Get("Retry-After"))
+		return result, &ProviderError{StatusCode: res.StatusCode, Code: failure.Error.Code, Type: failure.Error.Type, RetryAfterSeconds: max(0, retryAfter)}
 	}
 	err = json.NewDecoder(io.LimitReader(res.Body, 1<<20)).Decode(&result)
 	return result, err
+}
+
+type ProviderError struct {
+	StatusCode        int
+	Code              string
+	Type              string
+	RetryAfterSeconds int
+}
+
+func (e *ProviderError) Error() string {
+	return fmt.Sprintf("OpenAI returned HTTP %d (code=%s, type=%s)", e.StatusCode, e.Code, e.Type)
+}
+
+func (e *ProviderError) QuotaExhausted() bool {
+	switch e.Code {
+	case "credit_balance_exhausted", "organization_spend_limit_exceeded", "project_spend_limit_exceeded", "organization_usage_limit_exceeded", "insufficient_quota":
+		return true
+	}
+	return e.Type == "insufficient_quota"
 }
 
 func (c *Client) completeCLI(ctx context.Context, payload []byte) (response, error) {
@@ -102,7 +130,7 @@ func (c *Client) completeCLI(ctx context.Context, payload []byte) (response, err
 		if ctx.Err() != nil {
 			return result, ctx.Err()
 		}
-		return result, fmt.Errorf("codex CLI failed: %w", err)
+		return result, fmt.Errorf("codex CLI failed (%s): %w", cliFailureCategory(stderr.String()), err)
 	}
 	output, err := os.ReadFile(outputPath)
 	if err != nil {
@@ -122,6 +150,22 @@ func (c *Client) completeCLI(ctx context.Context, payload []byte) (response, err
 		Text string `json:"text"`
 	}{{Type: "output_text", Text: string(output)}}})
 	return result, nil
+}
+
+func cliFailureCategory(stderr string) string {
+	lower := strings.ToLower(stderr)
+	switch {
+	case strings.Contains(lower, "429"), strings.Contains(lower, "quota"), strings.Contains(lower, "rate limit"):
+		return "quota_or_rate_limit"
+	case strings.Contains(lower, "401"), strings.Contains(lower, "unauthorized"), strings.Contains(lower, "authentication"), strings.Contains(lower, "api key"):
+		return "authentication"
+	case strings.Contains(lower, "unexpected argument"), strings.Contains(lower, "unknown option"):
+		return "command_arguments"
+	case strings.Contains(lower, "model") && strings.Contains(lower, "not found"):
+		return "model_unavailable"
+	default:
+		return "unknown"
+	}
 }
 
 func cliEnvironment(dir string) []string {

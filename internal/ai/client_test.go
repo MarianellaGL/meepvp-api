@@ -3,6 +3,7 @@ package ai
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"os"
@@ -193,5 +194,28 @@ func TestWorkerFallsBackToResponsesWhenCodexFails(t *testing.T) {
 	result, err := completeWithFallback(context.Background(), payload, cli, responses)
 	if err != nil || result.Status != "completed" {
 		t.Fatalf("fallback response: %#v, %v", result, err)
+	}
+}
+
+func TestResponsesRateLimitKeepsProviderCodeAndDelay(t *testing.T) {
+	client := &Client{key: "test-key", endpoint: "https://example.test/v1/responses",
+		http: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			return &http.Response{StatusCode: http.StatusTooManyRequests, Header: http.Header{"Retry-After": []string{"17"}},
+				Body: io.NopCloser(strings.NewReader(`{"error":{"type":"rate_limit_error","code":"rate_limit_exceeded"}}`))}, nil
+		})}}
+	_, err := client.completeResponses(context.Background(), []byte(`{}`))
+	var providerErr *ProviderError
+	if !errors.As(err, &providerErr) || providerErr.StatusCode != 429 || providerErr.Code != "rate_limit_exceeded" || providerErr.RetryAfterSeconds != 17 || providerErr.QuotaExhausted() {
+		t.Fatalf("rate limit classification: %#v, %v", providerErr, err)
+	}
+	providerErr.Code = "credit_balance_exhausted"
+	if !providerErr.QuotaExhausted() {
+		t.Fatal("prepaid credit exhaustion must not be treated as a retryable rate limit")
+	}
+}
+
+func TestCodexFailureCategoryDoesNotExposeStderr(t *testing.T) {
+	if got := cliFailureCategory("Error 429: quota exceeded for sk-secret-value"); got != "quota_or_rate_limit" {
+		t.Fatalf("unexpected category: %q", got)
 	}
 }

@@ -3538,6 +3538,10 @@
           "ruleId": {
             "type": "string"
           },
+          "rule": {
+            "$ref": "#/components/schemas/ScoringRule",
+            "description": "Planilla con la que se juega; quienes participan la ven aunque sea privada."
+          },
           "players": {
             "type": "array",
             "items": {

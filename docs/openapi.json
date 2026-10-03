@@ -592,7 +592,7 @@
             "TableToken": []
           }
         ],
-        "description": "X-Table-Token requerido. Bearer opcional: vincula al usuario con el primer jugador."
+        "description": "X-Table-Token requerido. Bearer opcional: vincula al usuario con el primer jugador. waitForPlayers deja la partida en waiting (sin reloj ni puntos) hasta que se unan los jugadores listados o el anfitrión la inicie; el primero es el anfitrión y ya cuenta como unido."
       }
     },
     "/v1/tables/{code}/scheduled-games": {
@@ -1269,6 +1269,53 @@
             }
           }
         }
+      }
+    },
+    "/v1/sessions/{id}/start": {
+      "post": {
+        "operationId": "post_v1_sessions_id_start",
+        "tags": [
+          "Partidas"
+        ],
+        "summary": "Iniciar sin esperar a los jugadores que faltan",
+        "description": "Solo el anfitrión (X-Table-Token). Pasa una partida waiting a active y arranca el reloj; responde 400 si no estaba esperando.",
+        "responses": {
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Session"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "Request error; JSON error message",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "security": [
+          {
+            "TableToken": []
+          }
+        ]
       }
     },
     "/v1/sessions/{id}/finish": {

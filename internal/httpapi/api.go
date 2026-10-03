@@ -345,6 +345,8 @@ func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 	var input struct {
 		RuleID  string          `json:"ruleId"`
 		Players []domain.Player `json:"players"`
+		// WaitForPlayers keeps the game waiting until every listed player joins.
+		WaitForPlayers bool `json:"waitForPlayers"`
 	}
 	if !decodeJSON(w, r, &input) {
 		return
@@ -354,7 +356,7 @@ func (a *API) createSession(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusUnauthorized, "invalid session")
 		return
 	}
-	session, err := a.store.CreateSession(parts[3], r.Header.Get("X-Table-Token"), input.RuleID, input.Players)
+	session, err := a.store.CreateSession(parts[3], r.Header.Get("X-Table-Token"), input.RuleID, input.Players, input.WaitForPlayers)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -543,6 +545,10 @@ func (a *API) adjustPoints(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	a.writeSession(w, http.StatusOK, session)
+}
+
+func (a *API) startSession(w http.ResponseWriter, r *http.Request) {
+	a.changeHostSession(w, r, "start", a.store.StartSession)
 }
 
 func (a *API) finishSession(w http.ResponseWriter, r *http.Request) {

@@ -80,7 +80,7 @@ func TestFoundationAdoptionPreservesDataAndAuth(t *testing.T) {
 	rulePayload, err := json.Marshal(rule)
 	require.NoError(t, err)
 	require.NoError(t, db.Exec(`INSERT INTO scoring_rules (id, data, created_at) VALUES (?, ?, ?)`, rule.ID, rulePayload, rule.CreatedAt).Error)
-	session, err := repo.CreateSession(table.Code, table.HostToken, rule.ID, []domain.Player{{Name: "Ana"}})
+	session, err := repo.CreateSession(table.Code, table.HostToken, rule.ID, []domain.Player{{Name: "Ana"}}, false)
 	require.NoError(t, err)
 	require.NoError(t, repo.LinkUserSession(old.ID, session.ID, session.Players[0].ID))
 

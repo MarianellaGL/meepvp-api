@@ -20,8 +20,11 @@ func (s *GameRepository) changed(result domain.ScoreSession, err error) (domain.
 	}
 	return result, err
 }
-func (s *GameRepository) CreateSession(tableCode, hostToken, ruleID string, players []domain.Player) (domain.ScoreSession, error) {
-	return s.changed(s.Repository.CreateSession(tableCode, hostToken, ruleID, players))
+func (s *GameRepository) CreateSession(tableCode, hostToken, ruleID string, players []domain.Player, waitForPlayers bool) (domain.ScoreSession, error) {
+	return s.changed(s.Repository.CreateSession(tableCode, hostToken, ruleID, players, waitForPlayers))
+}
+func (s *GameRepository) StartSession(id string) (domain.ScoreSession, error) {
+	return s.changed(s.Repository.StartSession(id))
 }
 func (s *GameRepository) AddPlayer(id, name, userID string) (domain.ScoreSession, error) {
 	return s.changed(s.Repository.AddPlayer(id, name, userID))

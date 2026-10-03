@@ -32,7 +32,9 @@ type Repository interface {
 	ListUserRules(userID string) ([]domain.ScoringRule, error)
 	SearchPublicRules(query string, bggID int) ([]domain.ScoringRule, error)
 	GetRule(id string) (domain.ScoringRule, error)
-	CreateSession(tableCode, hostToken, ruleID string, players []domain.Player) (domain.ScoreSession, error)
+	// CreateSession waits for the listed players before starting when waitForPlayers is set.
+	CreateSession(tableCode, hostToken, ruleID string, players []domain.Player, waitForPlayers bool) (domain.ScoreSession, error)
+	StartSession(id string) (domain.ScoreSession, error)
 	GetSession(id string) (domain.ScoreSession, error)
 	ActiveSessionByTable(code string) (domain.ScoreSession, error)
 	AddPlayer(sessionID, name, userID string) (domain.ScoreSession, error)

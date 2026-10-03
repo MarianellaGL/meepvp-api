@@ -26,7 +26,6 @@ type MemoryStore struct {
 	rules        map[string]domain.ScoringRule
 	sessions     map[string]domain.ScoreSession
 	boardPhotos  map[string]memoryBoardPhoto
-	imports      map[string]domain.PDFImport
 	plans        map[string]domain.ScheduledGame
 	users        map[string]domain.User
 	passwords    map[string]string
@@ -50,7 +49,7 @@ func NewMemoryStore() *MemoryStore {
 	return &MemoryStore{
 		rulebooks: map[string]domain.Rulebook{},
 		tables:    map[string]domain.Table{}, rules: map[string]domain.ScoringRule{},
-		sessions: map[string]domain.ScoreSession{}, boardPhotos: map[string]memoryBoardPhoto{}, imports: map[string]domain.PDFImport{}, plans: map[string]domain.ScheduledGame{},
+		sessions: map[string]domain.ScoreSession{}, boardPhotos: map[string]memoryBoardPhoto{}, plans: map[string]domain.ScheduledGame{},
 		users: map[string]domain.User{}, passwords: map[string]string{}, authSessions: map[string]memoryAuthSession{}, userSessions: map[string]map[string]string{}, userTables: map[string]string{}, userAvatars: map[string]memoryBoardPhoto{},
 	}
 }
@@ -100,14 +99,25 @@ func (s *MemoryStore) CreateRule(rule domain.ScoringRule) (domain.ScoringRule, e
 	return rule, nil
 }
 
-func (s *MemoryStore) ListRules() ([]domain.ScoringRule, error) {
+func (s *MemoryStore) ListRules(userID string) ([]domain.ScoringRule, error) {
+	return s.filterRules(func(rule domain.ScoringRule) bool { return rule.IsPublic || (userID != "" && rule.OwnerID == userID) }), nil
+}
+
+func (s *MemoryStore) ListUserRules(userID string) ([]domain.ScoringRule, error) {
+	return s.filterRules(func(rule domain.ScoringRule) bool { return rule.OwnerID == userID }), nil
+}
+
+func (s *MemoryStore) filterRules(keep func(domain.ScoringRule) bool) []domain.ScoringRule {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	rules := make([]domain.ScoringRule, 0, len(s.rules))
+	rules := []domain.ScoringRule{}
 	for _, rule := range s.rules {
-		rules = append(rules, rule)
+		if keep(rule) {
+			rules = append(rules, rule)
+		}
 	}
-	return rules, nil
+	sort.Slice(rules, func(i, j int) bool { return rules[i].CreatedAt.After(rules[j].CreatedAt) })
+	return rules
 }
 
 func (s *MemoryStore) SearchPublicRules(query string, bggID int) ([]domain.ScoringRule, error) {
@@ -426,27 +436,6 @@ func (s *MemoryStore) GetBoardPhoto(id string) ([]byte, string, error) {
 		return nil, "", ErrNotFound
 	}
 	return append([]byte(nil), photo.data...), photo.contentType, nil
-}
-
-func (s *MemoryStore) CreatePDFImport(ruleID, fileName string) (domain.PDFImport, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if _, ok := s.rules[ruleID]; !ok {
-		return domain.PDFImport{}, ErrNotFound
-	}
-	job := domain.PDFImport{ID: randomID(), RuleID: ruleID, Status: "queued", FileName: fileName, CreatedAt: time.Now().UTC()}
-	s.imports[job.ID] = job
-	return job, nil
-}
-
-func (s *MemoryStore) GetPDFImport(id string) (domain.PDFImport, error) {
-	s.mu.RLock()
-	defer s.mu.RUnlock()
-	job, ok := s.imports[id]
-	if !ok {
-		return domain.PDFImport{}, ErrNotFound
-	}
-	return job, nil
 }
 
 func (s *MemoryStore) CreateScheduledGame(tableCode, hostToken string, game domain.ScheduledGame) (domain.ScheduledGame, error) {

@@ -268,6 +268,18 @@
         "security": [{"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}]
       }
     },
+    "/v1/me/scoring-rules": {
+      "get": {
+        "operationId": "get_v1_me_scoring_rules",
+        "tags": ["Cuentas móviles"],
+        "summary": "Listar mis planillas (públicas y privadas)",
+        "responses": {
+          "200": {"description": "Planillas creadas por la cuenta", "content": {"application/json": {"schema": {"type": "array", "items": {"$ref": "#/components/schemas/ScoringRule"}}}}},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        },
+        "security": [{"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}]
+      }
+    },
     "/v1/me/avatar": {
       "get": {
         "operationId": "get_v1_me_avatar",
@@ -845,7 +857,9 @@
         "tags": [
           "Planillas"
         ],
-        "summary": "Listar planillas",
+        "summary": "Listar planillas públicas y las propias",
+        "description": "Sin sesión devuelve solo planillas públicas. Con sesión agrega las planillas privadas de la cuenta. Las planillas privadas de otras personas nunca se listan.",
+        "security": [{}, {"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}],
         "responses": {
           "200": {
             "description": "Success",
@@ -910,7 +924,7 @@
             }
           }
         },
-        "description": "Crear planillas privadas no requiere cuenta. isPublic=true requiere Bearer válido. winCondition omitido usa highest_total."
+        "description": "Crear planillas privadas no requiere cuenta; con sesión, la planilla queda asociada a la cuenta. isPublic=true requiere Bearer válido. winCondition omitido usa highest_total."
       }
     },
     "/v1/community/scoring-rules": {
@@ -1637,110 +1651,6 @@
           }
         },
         "description": "Máximo 20 MB y 100 páginas. Incluye OCR cuando está disponible. Revisar scoringSuggestion antes de guardar."
-      }
-    },
-    "/v1/scoring-rules/{id}/pdf-imports": {
-      "post": {
-        "operationId": "post_v1_scoring_rules_id_pdf_imports",
-        "tags": [
-          "PDF"
-        ],
-        "summary": "Ruta antigua de importación de PDF (descontinuada)",
-        "deprecated": true,
-        "responses": {
-          "410": {
-            "description": "Usar /v1/pdf/extract",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Request error; JSON error message",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "multipart/form-data": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "file": {
-                    "type": "string",
-                    "format": "binary"
-                  }
-                },
-                "required": [
-                  "file"
-                ]
-              }
-            }
-          }
-        },
-        "description": "La cola antigua no tenía un procesador. Esta ruta devuelve 410; usar /v1/pdf/extract."
-      }
-    },
-    "/v1/pdf-imports/{id}": {
-      "get": {
-        "operationId": "get_v1_pdf_imports_id",
-        "tags": [
-          "PDF"
-        ],
-        "summary": "Ruta antigua de estado de importación (descontinuada)",
-        "deprecated": true,
-        "responses": {
-          "410": {
-            "description": "Usar /v1/pdf/extract",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          },
-          "default": {
-            "description": "Request error; JSON error message",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/Error"
-                }
-              }
-            }
-          }
-        },
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ]
       }
     },
     "/v1/discovery/search": {
@@ -3022,27 +2932,6 @@
             "format": "date-time"
           },
           "finishedAt": {
-            "type": "string",
-            "format": "date-time"
-          }
-        }
-      },
-      "PDFImport": {
-        "type": "object",
-        "properties": {
-          "id": {
-            "type": "string"
-          },
-          "ruleId": {
-            "type": "string"
-          },
-          "status": {
-            "type": "string"
-          },
-          "fileName": {
-            "type": "string"
-          },
-          "createdAt": {
             "type": "string",
             "format": "date-time"
           }

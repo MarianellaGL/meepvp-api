@@ -75,8 +75,11 @@ func TestFoundationAdoptionPreservesDataAndAuth(t *testing.T) {
 	require.NoError(t, repo.SaveAuthSession(old.ID, services.HashToken(oldToken), time.Now().Add(time.Hour).Unix()))
 	table, err := repo.CreateTable("existing table")
 	require.NoError(t, err)
-	rule, err := repo.CreateRule(domain.ScoringRule{GameName: "Existing game", Name: "Standard", Fields: []domain.ScoreField{{Name: "Coins", Kind: domain.FieldKindCounter, PointsPerUnit: 1}}})
+	// Written with the baseline columns: scoring_rules had no owner yet.
+	rule := domain.ScoringRule{ID: "existing-rule", GameName: "Existing game", Name: "Standard", WinCondition: domain.WinConditionHighest, Fields: []domain.ScoreField{{ID: "coins", Name: "Coins", Kind: domain.FieldKindCounter, PointsPerUnit: 1}}, CreatedAt: time.Now().UTC()}
+	rulePayload, err := json.Marshal(rule)
 	require.NoError(t, err)
+	require.NoError(t, db.Exec(`INSERT INTO scoring_rules (id, data, created_at) VALUES (?, ?, ?)`, rule.ID, rulePayload, rule.CreatedAt).Error)
 	session, err := repo.CreateSession(table.Code, table.HostToken, rule.ID, []domain.Player{{Name: "Ana"}})
 	require.NoError(t, err)
 	require.NoError(t, repo.LinkUserSession(old.ID, session.ID, session.Players[0].ID))

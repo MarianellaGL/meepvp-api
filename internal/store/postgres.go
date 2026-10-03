@@ -70,12 +70,22 @@ func (s *PostgresStore) CreateRule(rule domain.ScoringRule) (domain.ScoringRule,
 		return domain.ScoringRule{}, err
 	}
 	payload, _ := json.Marshal(rule)
-	_, err := s.db.Exec(`INSERT INTO scoring_rules (id, data, created_at) VALUES ($1, $2, $3)`, rule.ID, payload, rule.CreatedAt)
+	_, err := s.db.Exec(`INSERT INTO scoring_rules (id, data, created_at, owner_user_id) VALUES ($1, $2, $3, NULLIF($4, ''))`, rule.ID, payload, rule.CreatedAt, rule.OwnerID)
 	return rule, err
 }
 
-func (s *PostgresStore) ListRules() ([]domain.ScoringRule, error) {
-	rows, err := s.db.Query(`SELECT data FROM scoring_rules ORDER BY created_at DESC`)
+func (s *PostgresStore) ListRules(userID string) ([]domain.ScoringRule, error) {
+	return s.queryRules(`SELECT data FROM scoring_rules
+WHERE data->>'isPublic' = 'true' OR ($1 <> '' AND owner_user_id = $1)
+ORDER BY created_at DESC`, userID)
+}
+
+func (s *PostgresStore) ListUserRules(userID string) ([]domain.ScoringRule, error) {
+	return s.queryRules(`SELECT data FROM scoring_rules WHERE owner_user_id = $1 ORDER BY created_at DESC`, userID)
+}
+
+func (s *PostgresStore) queryRules(query string, args ...any) ([]domain.ScoringRule, error) {
+	rows, err := s.db.Query(query, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -96,28 +106,11 @@ func (s *PostgresStore) ListRules() ([]domain.ScoringRule, error) {
 }
 
 func (s *PostgresStore) SearchPublicRules(query string, bggID int) ([]domain.ScoringRule, error) {
-	rows, err := s.db.Query(`SELECT data FROM scoring_rules
+	return s.queryRules(`SELECT data FROM scoring_rules
 WHERE data->>'isPublic' = 'true'
   AND ($1 = '' OR data->>'gameName' ILIKE '%' || $1 || '%' OR data->>'name' ILIKE '%' || $1 || '%')
   AND ($2 = 0 OR (data->>'bggId')::int = $2)
 ORDER BY created_at DESC LIMIT 50`, strings.TrimSpace(query), bggID)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = rows.Close() }()
-	rules := []domain.ScoringRule{}
-	for rows.Next() {
-		var payload []byte
-		if err := rows.Scan(&payload); err != nil {
-			return nil, err
-		}
-		var rule domain.ScoringRule
-		if err := json.Unmarshal(payload, &rule); err != nil {
-			return nil, err
-		}
-		rules = append(rules, rule)
-	}
-	return rules, rows.Err()
 }
 
 func (s *PostgresStore) GetRule(id string) (domain.ScoringRule, error) {
@@ -494,32 +487,6 @@ func (s *PostgresStore) GetBoardPhoto(id string) ([]byte, string, error) {
 		return nil, "", ErrNotFound
 	}
 	return data, contentType, err
-}
-
-func (s *PostgresStore) CreatePDFImport(ruleID, fileName string) (domain.PDFImport, error) {
-	if _, err := s.GetRule(ruleID); err != nil {
-		return domain.PDFImport{}, err
-	}
-	job := domain.PDFImport{ID: randomID(), RuleID: ruleID, Status: "queued", FileName: fileName, CreatedAt: time.Now().UTC()}
-	payload, _ := json.Marshal(job)
-	_, err := s.db.Exec(`INSERT INTO pdf_imports (id, rule_id, data, created_at) VALUES ($1, $2, $3, $4)`, job.ID, ruleID, payload, job.CreatedAt)
-	return job, err
-}
-
-func (s *PostgresStore) GetPDFImport(id string) (domain.PDFImport, error) {
-	var payload []byte
-	err := s.db.QueryRow(`SELECT data FROM pdf_imports WHERE id = $1`, id).Scan(&payload)
-	if err == sql.ErrNoRows {
-		return domain.PDFImport{}, ErrNotFound
-	}
-	if err != nil {
-		return domain.PDFImport{}, err
-	}
-	var job domain.PDFImport
-	if err := json.Unmarshal(payload, &job); err != nil {
-		return domain.PDFImport{}, err
-	}
-	return job, nil
 }
 
 func (s *PostgresStore) CreateScheduledGame(tableCode, hostToken string, game domain.ScheduledGame) (domain.ScheduledGame, error) {

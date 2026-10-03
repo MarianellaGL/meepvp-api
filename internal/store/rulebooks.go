@@ -43,7 +43,7 @@ func (s *MemoryStore) SaveRulebooks(books []domain.Rulebook) error {
 	defer s.mu.Unlock()
 	for _, book := range books {
 		if old, ok := s.rulebooks[book.ID]; ok {
-			book.CreatedAt, book.Edition = old.CreatedAt, old.Edition
+			book.CreatedAt, book.Edition, book.BGGID = old.CreatedAt, old.Edition, old.BGGID
 		}
 		book.UpdatedAt = time.Now().UTC()
 		s.rulebooks[book.ID] = book
@@ -75,4 +75,93 @@ func (s *MemoryStore) GetRulebook(id string) (domain.Rulebook, error) {
 		return book, ErrNotFound
 	}
 	return book, nil
+}
+
+func (s *PostgresStore) LinkRulebook(id string, bggID int) error {
+	result := s.orm.Model(&domain.Rulebook{}).Where("id = ?", id).Update("bgg_id", bggID)
+	if result.Error == nil && result.RowsAffected == 0 {
+		return ErrNotFound
+	}
+	return result.Error
+}
+
+func (s *PostgresStore) GameRulebooks(bggID int) ([]domain.Rulebook, error) {
+	books := []domain.Rulebook{}
+	err := s.orm.Where("bgg_id = ?", bggID).Order("name, id").Find(&books).Error
+	return books, err
+}
+
+func (s *PostgresStore) SaveRulebookPages(id string, pages []string) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback() }()
+	if _, err := tx.Exec(`DELETE FROM rulebook_pages WHERE rulebook_id = $1`, id); err != nil {
+		return err
+	}
+	for i, text := range pages {
+		if _, err := tx.Exec(`INSERT INTO rulebook_pages (rulebook_id, page, text) VALUES ($1, $2, $3)`, id, i+1, text); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func (s *PostgresStore) RulebookPages(id string) ([]string, error) {
+	rows, err := s.db.Query(`SELECT text FROM rulebook_pages WHERE rulebook_id = $1 ORDER BY page`, id)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+	pages := []string{}
+	for rows.Next() {
+		var text string
+		if err := rows.Scan(&text); err != nil {
+			return nil, err
+		}
+		pages = append(pages, text)
+	}
+	return pages, rows.Err()
+}
+
+func (s *MemoryStore) LinkRulebook(id string, bggID int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	book, ok := s.rulebooks[id]
+	if !ok {
+		return ErrNotFound
+	}
+	book.BGGID = &bggID
+	s.rulebooks[id] = book
+	return nil
+}
+
+func (s *MemoryStore) GameRulebooks(bggID int) ([]domain.Rulebook, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	books := []domain.Rulebook{}
+	for _, book := range s.rulebooks {
+		if book.BGGID != nil && *book.BGGID == bggID {
+			books = append(books, book)
+		}
+	}
+	sort.Slice(books, func(i, j int) bool { return books[i].Name < books[j].Name })
+	return books, nil
+}
+
+func (s *MemoryStore) SaveRulebookPages(id string, pages []string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.rulebooks[id]; !ok {
+		return ErrNotFound
+	}
+	s.bookPages[id] = append([]string(nil), pages...)
+	return nil
+}
+
+func (s *MemoryStore) RulebookPages(id string) ([]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return append([]string{}, s.bookPages[id]...), nil
 }

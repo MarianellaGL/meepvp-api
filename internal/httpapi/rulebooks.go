@@ -72,15 +72,28 @@ func (a *API) extractRulebook(c *gin.Context) {
 		writeStoreError(c.Writer, err)
 		return
 	}
-	data, err := a.rulebooks.Download(c.Request.Context(), book)
+	// A rulebook is downloaded and read once; later requests reuse its pages.
+	pages, err := a.store.RulebookPages(book.ID)
 	if err != nil {
-		writeError(c.Writer, http.StatusBadGateway, "could not download rulebook")
+		writeStoreError(c.Writer, err)
 		return
 	}
-	result, err := pdfreader.Extract(data, book.SourceID+".pdf")
-	if err != nil {
-		writeError(c.Writer, http.StatusUnprocessableEntity, "could not extract rulebook PDF")
-		return
+	var result pdfreader.Result
+	if len(pages) > 0 {
+		result = pdfreader.FromPages(book.SourceID+".pdf", pages)
+	} else {
+		data, err := a.rulebooks.Download(c.Request.Context(), book)
+		if err != nil {
+			writeError(c.Writer, http.StatusBadGateway, "could not download rulebook")
+			return
+		}
+		if result, err = pdfreader.Extract(data, book.SourceID+".pdf"); err != nil {
+			writeError(c.Writer, http.StatusUnprocessableEntity, "could not extract rulebook PDF")
+			return
+		}
+		if err := a.store.SaveRulebookPages(book.ID, result.PageTexts); err != nil {
+			slog.Warn("could not store rulebook pages", "rulebook", book.ID, "error", err)
+		}
 	}
 	a.addAISuggestion(c.Request, &result, book.Name)
 	writeJSON(c.Writer, http.StatusOK, struct {

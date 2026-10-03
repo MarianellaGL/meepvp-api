@@ -21,6 +21,15 @@ type Result struct {
 	Text       string             `json:"text"`
 	Excerpts   []string           `json:"scoringExcerpts"`
 	Suggestion *ScoringSuggestion `json:"scoringSuggestion,omitempty"`
+	// PageTexts keeps each page's text so it can be stored and searched by page.
+	PageTexts []string `json:"-"`
+}
+
+// FromPages rebuilds a result from stored page texts without reading the PDF again.
+func FromPages(fileName string, pages []string) Result {
+	text := strings.TrimSpace(strings.Join(pages, "\n\n"))
+	return Result{FileName: fileName, Pages: len(pages), Text: text, Excerpts: scoringExcerpts(text),
+		Suggestion: suggestScoring(text), PageTexts: pages}
 }
 
 func Extract(data []byte, fileName string) (result Result, err error) {
@@ -48,6 +57,7 @@ func Extract(data []byte, fileName string) (result Result, err error) {
 	}
 	var text strings.Builder
 	needsOCR := false
+	pageTexts := make([]string, 0, pages)
 	for pageNumber := 1; pageNumber <= pages; pageNumber++ {
 		pageText, pageErr := reader.Page(pageNumber).GetPlainText(nil)
 		if pageErr != nil {
@@ -63,6 +73,7 @@ func Extract(data []byte, fileName string) (result Result, err error) {
 			needsOCR = true
 		}
 		text.WriteString(pageText)
+		pageTexts = append(pageTexts, strings.TrimSpace(pageText))
 		if len([]rune(text.String())) > maxTextRunes {
 			return Result{}, fmt.Errorf("PDF text is too long")
 		}
@@ -71,7 +82,7 @@ func Extract(data []byte, fileName string) (result Result, err error) {
 		return extractWithPDFKit(data, fileName)
 	}
 	plainText := strings.TrimSpace(text.String())
-	return Result{FileName: fileName, Pages: pages, Text: plainText, Excerpts: scoringExcerpts(plainText)}, nil
+	return Result{FileName: fileName, Pages: pages, Text: plainText, Excerpts: scoringExcerpts(plainText), PageTexts: pageTexts}, nil
 }
 
 func scoringExcerpts(text string) []string {

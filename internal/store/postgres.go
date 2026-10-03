@@ -129,7 +129,7 @@ func (s *PostgresStore) GetRule(id string) (domain.ScoringRule, error) {
 	return rule, nil
 }
 
-func (s *PostgresStore) CreateSession(tableCode, hostToken, ruleID string, players []domain.Player) (domain.ScoreSession, error) {
+func (s *PostgresStore) CreateSession(tableCode, hostToken, ruleID string, players []domain.Player, waitForPlayers bool) (domain.ScoreSession, error) {
 	if len(players) == 0 {
 		return domain.ScoreSession{}, ErrValidation
 	}
@@ -143,16 +143,15 @@ func (s *PostgresStore) CreateSession(tableCode, hostToken, ruleID string, playe
 	if _, err := s.GetRule(ruleID); err != nil {
 		return domain.ScoreSession{}, err
 	}
-	values := map[string]map[string]int{}
 	for i := range players {
 		if strings.TrimSpace(players[i].Name) == "" {
 			return domain.ScoreSession{}, ErrValidation
 		}
 		players[i].ID = randomID()
-		values[players[i].ID] = map[string]int{}
+		players[i].Joined = false
 	}
 	now := time.Now().UTC()
-	session := domain.ScoreSession{ID: randomID(), TableCode: table.Code, RuleID: ruleID, Players: players, Values: values, Status: "active", RunningSince: &now, CreatedAt: now, LastModified: now}
+	session := domain.NewScoreSession(randomID(), table.Code, ruleID, players, waitForPlayers, now)
 	payload, _ := json.Marshal(session)
 	_, err = s.db.Exec(`INSERT INTO score_sessions (id, table_code, rule_id, data, created_at) VALUES ($1, $2, $3, $4, $5)`, session.ID, session.TableCode, session.RuleID, payload, now)
 	return session, err
@@ -176,7 +175,7 @@ func (s *PostgresStore) GetSession(id string) (domain.ScoreSession, error) {
 
 func (s *PostgresStore) ActiveSessionByTable(code string) (domain.ScoreSession, error) {
 	var payload []byte
-	err := s.db.QueryRow(`SELECT data FROM score_sessions WHERE table_code = $1 AND data->>'status' IN ('active', 'paused') ORDER BY created_at DESC LIMIT 1`, strings.ToUpper(code)).Scan(&payload)
+	err := s.db.QueryRow(`SELECT data FROM score_sessions WHERE table_code = $1 AND data->>'status' IN ('waiting', 'active', 'paused') ORDER BY created_at DESC LIMIT 1`, strings.ToUpper(code)).Scan(&payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.ScoreSession{}, ErrNotFound
 	}
@@ -208,7 +207,7 @@ func (s *PostgresStore) AddPlayer(sessionID, name, userID string) (domain.ScoreS
 	if err := json.Unmarshal(payload, &session); err != nil {
 		return domain.ScoreSession{}, err
 	}
-	if session.Status != "active" {
+	if session.Status != "active" && session.Status != domain.StatusWaiting {
 		return domain.ScoreSession{}, ErrValidation
 	}
 	if userID != "" {
@@ -226,30 +225,12 @@ func (s *PostgresStore) AddPlayer(sessionID, name, userID string) (domain.ScoreS
 			return domain.ScoreSession{}, ErrConflict
 		}
 	}
-	for _, player := range session.Players {
-		if strings.EqualFold(player.Name, name) {
-			if userID != "" {
-				if _, err := tx.Exec(`INSERT INTO user_game_sessions (user_id, session_id, player_id) VALUES ($1, $2, $3)`, userID, sessionID, player.ID); err != nil {
-					var pgErr *pgconn.PgError
-					if errors.As(err, &pgErr) && pgErr.Code == "23505" {
-						return domain.ScoreSession{}, ErrConflict
-					}
-					return domain.ScoreSession{}, err
-				}
-			}
-			return session, tx.Commit()
+	player, changed := session.Join(name, randomID(), time.Now().UTC())
+	if changed {
+		payload, _ = json.Marshal(session)
+		if _, err := tx.Exec(`UPDATE score_sessions SET data = $1 WHERE id = $2`, payload, sessionID); err != nil {
+			return domain.ScoreSession{}, err
 		}
-	}
-	player := domain.Player{ID: randomID(), Name: name}
-	session.Players = append(session.Players, player)
-	if session.Values == nil {
-		session.Values = map[string]map[string]int{}
-	}
-	session.Values[player.ID] = map[string]int{}
-	session.LastModified = time.Now().UTC()
-	payload, _ = json.Marshal(session)
-	if _, err := tx.Exec(`UPDATE score_sessions SET data = $1 WHERE id = $2`, payload, sessionID); err != nil {
-		return domain.ScoreSession{}, err
 	}
 	if userID != "" {
 		if _, err := tx.Exec(`INSERT INTO user_game_sessions (user_id, session_id, player_id) VALUES ($1, $2, $3)`, userID, sessionID, player.ID); err != nil {
@@ -393,6 +374,10 @@ func (s *PostgresStore) ReopenSession(id string) (domain.ScoreSession, error) {
 	return s.updateSessionState(id, "reopen")
 }
 
+func (s *PostgresStore) StartSession(id string) (domain.ScoreSession, error) {
+	return s.updateSessionState(id, "start")
+}
+
 func (s *PostgresStore) PauseSession(id string) (domain.ScoreSession, error) {
 	return s.updateSessionState(id, "pause")
 }
@@ -420,6 +405,10 @@ func (s *PostgresStore) updateSessionState(id, action string) (domain.ScoreSessi
 	}
 	now := time.Now().UTC()
 	switch action {
+	case "start":
+		if !session.Start(now) {
+			return domain.ScoreSession{}, ErrValidation
+		}
 	case "pause":
 		if session.Status != "active" {
 			return domain.ScoreSession{}, ErrValidation

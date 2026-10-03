@@ -63,6 +63,9 @@ type Table struct {
 type Player struct {
 	ID   string `json:"id"`
 	Name string `json:"name"`
+	// Joined is set once the player is at the table (the host on creation,
+	// others when they join with the code). Only waiting games use it.
+	Joined bool `json:"joined,omitempty"`
 }
 
 type ScoreSession struct {

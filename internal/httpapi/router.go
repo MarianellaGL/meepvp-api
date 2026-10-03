@@ -73,6 +73,7 @@ func (a *API) Handler() http.Handler {
 	sessions.PUT("/scores", gin.WrapF(a.updateScores))
 	sessions.PATCH("/scores", gin.WrapF(a.setScore))
 	sessions.POST("/points", gin.WrapF(a.adjustPoints))
+	sessions.POST("/start", gin.WrapF(a.startSession))
 	sessions.POST("/finish", gin.WrapF(a.finishSession))
 	sessions.POST("/pause", gin.WrapF(a.pauseSession))
 	sessions.POST("/resume", gin.WrapF(a.resumeSession))

@@ -152,7 +152,7 @@ func (s *MemoryStore) GetRule(id string) (domain.ScoringRule, error) {
 	return rule, nil
 }
 
-func (s *MemoryStore) CreateSession(tableCode, hostToken, ruleID string, players []domain.Player) (domain.ScoreSession, error) {
+func (s *MemoryStore) CreateSession(tableCode, hostToken, ruleID string, players []domain.Player, waitForPlayers bool) (domain.ScoreSession, error) {
 	if len(players) == 0 {
 		return domain.ScoreSession{}, ErrValidation
 	}
@@ -168,16 +168,14 @@ func (s *MemoryStore) CreateSession(tableCode, hostToken, ruleID string, players
 	if _, ok := s.rules[ruleID]; !ok {
 		return domain.ScoreSession{}, ErrNotFound
 	}
-	values := make(map[string]map[string]int, len(players))
 	for i := range players {
 		if strings.TrimSpace(players[i].Name) == "" {
 			return domain.ScoreSession{}, ErrValidation
 		}
 		players[i].ID = randomID()
-		values[players[i].ID] = map[string]int{}
+		players[i].Joined = false
 	}
-	now := time.Now().UTC()
-	session := domain.ScoreSession{ID: randomID(), TableCode: table.Code, RuleID: ruleID, Players: players, Values: values, Status: "active", RunningSince: &now, CreatedAt: now, LastModified: now}
+	session := domain.NewScoreSession(randomID(), table.Code, ruleID, players, waitForPlayers, time.Now().UTC())
 	s.sessions[session.ID] = session
 	return session, nil
 }
@@ -197,7 +195,7 @@ func (s *MemoryStore) ActiveSessionByTable(code string) (domain.ScoreSession, er
 	defer s.mu.RUnlock()
 	var latest domain.ScoreSession
 	for _, session := range s.sessions {
-		if session.TableCode == strings.ToUpper(code) && (session.Status == "active" || session.Status == "paused") && (latest.ID == "" || session.CreatedAt.After(latest.CreatedAt)) {
+		if session.TableCode == strings.ToUpper(code) && (session.Status == domain.StatusWaiting || session.Status == "active" || session.Status == "paused") && (latest.ID == "" || session.CreatedAt.After(latest.CreatedAt)) {
 			latest = session
 		}
 	}
@@ -215,7 +213,7 @@ func (s *MemoryStore) AddPlayer(sessionID, name, userID string) (domain.ScoreSes
 		return domain.ScoreSession{}, ErrNotFound
 	}
 	name = strings.TrimSpace(name)
-	if name == "" || session.Status != "active" {
+	if name == "" || (session.Status != "active" && session.Status != domain.StatusWaiting) {
 		return domain.ScoreSession{}, ErrValidation
 	}
 	if userID != "" && s.userSessions[userID][sessionID] != "" {
@@ -226,29 +224,14 @@ func (s *MemoryStore) AddPlayer(sessionID, name, userID string) (domain.ScoreSes
 		}
 		return domain.ScoreSession{}, ErrConflict
 	}
-	for _, player := range session.Players {
-		if strings.EqualFold(player.Name, name) {
-			if userID != "" {
-				for ownerID, memberships := range s.userSessions {
-					if memberships[sessionID] == player.ID && ownerID != userID {
-						return domain.ScoreSession{}, ErrConflict
-					}
-				}
-				if s.userSessions[userID] == nil {
-					s.userSessions[userID] = map[string]string{}
-				}
-				s.userSessions[userID][sessionID] = player.ID
+	player, _ := session.Join(name, randomID(), time.Now().UTC())
+	if userID != "" {
+		for ownerID, memberships := range s.userSessions {
+			if memberships[sessionID] == player.ID && ownerID != userID {
+				return domain.ScoreSession{}, ErrConflict
 			}
-			return session, nil
 		}
 	}
-	player := domain.Player{ID: randomID(), Name: name}
-	session.Players = append(session.Players, player)
-	if session.Values == nil {
-		session.Values = map[string]map[string]int{}
-	}
-	session.Values[player.ID] = map[string]int{}
-	session.LastModified = time.Now().UTC()
 	s.sessions[sessionID] = session
 	if userID != "" {
 		if s.userSessions[userID] == nil {
@@ -376,6 +359,20 @@ func (s *MemoryStore) ReopenSession(id string) (domain.ScoreSession, error) {
 	}
 	if session.Status == "finished" {
 		session.Resume(time.Now().UTC())
+	}
+	s.sessions[id] = session
+	return session, nil
+}
+
+func (s *MemoryStore) StartSession(id string) (domain.ScoreSession, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	session, ok := s.sessions[id]
+	if !ok {
+		return domain.ScoreSession{}, ErrNotFound
+	}
+	if !session.Start(time.Now().UTC()) {
+		return domain.ScoreSession{}, ErrValidation
 	}
 	s.sessions[id] = session
 	return session, nil

@@ -123,7 +123,7 @@ func TestDiscoveryCorrectsTyposFromRulebooksWithoutAI(t *testing.T) {
 	}
 	decode(t, w, &result)
 	require.Equal(t, "Schotten Totten", result.SearchedAs)
-	require.Equal(t, []string{"Schotten Totten"}, bggQueries)
+	require.Equal(t, []string{"shoten toten", "Schotten Totten"}, bggQueries, "the title is only tried after the literal query finds nothing")
 	require.Len(t, result.Games, 2)
 	require.Equal(t, 1, result.Games[0].BGGID, "exact title first")
 	require.Len(t, result.CommunityRules, 1)
@@ -141,4 +141,35 @@ func TestDiscoveryCorrectsTyposFromRulebooksWithoutAI(t *testing.T) {
 	require.Empty(t, result.SearchedAs)
 	require.Empty(t, result.SuggestedQuery)
 	require.Equal(t, []string{"zzqx"}, bggQueries, "nothing is searched again on the model's behalf")
+}
+
+func TestDiscoveryKeepsTheQueryWhenItAlreadyFindsGames(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("AI_PROVIDER", "")
+	bggQueries := []string{}
+	gameTransport := rulebookTransport(func(r *http.Request) (*http.Response, error) {
+		body := `<items/>`
+		if r.URL.Path == "/search" {
+			bggQueries = append(bggQueries, r.URL.Query().Get("query"))
+			body = `<items><item type="boardgame" id="197405"><name type="primary" value="Covenant"/></item></items>`
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	// rule-book.org's fuzzy answer to "coven" is another game.
+	bookTransport := rulebookTransport(func(r *http.Request) (*http.Response, error) {
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(`{"results":[{"id":"disc-cover","name":"Disc Cover Rulebook","language":"en","link":"https://cdn.1j1ju.com/medias/a.pdf"}]}`)), Header: make(http.Header)}, nil
+	})
+	h := httpapi.New(store.NewMemoryStore(), bgg.New("https://bgg.example", "", &http.Client{Transport: gameTransport})).WithRulebookClient(rulebooks.NewWithTransport(bookTransport)).Handler()
+	w := request(t, h, "GET", "/v1/discovery/search?query=coven", nil, "")
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var result struct {
+		Games []struct {
+			Name string `json:"name"`
+		} `json:"games"`
+		SearchedAs string `json:"searchedAs"`
+	}
+	decode(t, w, &result)
+	require.Empty(t, result.SearchedAs)
+	require.Equal(t, []string{"coven"}, bggQueries)
+	require.Equal(t, "Covenant", result.Games[0].Name)
 }

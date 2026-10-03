@@ -21,11 +21,12 @@ var (
 	documentWords = map[string]bool{"rulebook": true, "rulebooks": true, "rules": true, "rule": true, "book": true,
 		"regle": true, "regles": true, "reglamento": true, "manual": true}
 	documentSuffix = regexp.MustCompile(`(?i)\s*[-–:]?\s*(rule ?book|rules|règles?|reglamento|manual)\s*$`)
-	accents        = transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
 )
 
 // Normalize lowercases, removes accents and punctuation, and drops document words.
 func Normalize(s string) string {
+	// A transformer keeps state, so each call builds its own to stay safe across goroutines.
+	accents := transform.Chain(norm.NFD, runes.Remove(runes.In(unicode.Mn)), norm.NFC)
 	s, _, _ = transform.String(accents, strings.ToLower(s))
 	words := strings.FieldsFunc(s, func(r rune) bool { return !unicode.IsLetter(r) && !unicode.IsDigit(r) })
 	kept := words[:0]

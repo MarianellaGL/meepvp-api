@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -42,54 +43,45 @@ func (a *API) searchDiscovery(c *gin.Context) {
 		Status: "ready", Games: []bgg.CollectionGame{}, CommunityRules: []domain.ScoringRule{},
 		Rulebooks: []domain.Rulebook{}, UnavailableSources: []string{},
 	}
-	// rule-book.org tolerates typos, so its best hit names the game for the
-	// sources that only match literal text.
-	books, cached, err := a.findRulebooks(ctx, query, "en")
-	booksFailed := err != nil || (cached && len(books) == 0)
-	if err != nil {
-		slog.Warn("discovery saved rulebooks unavailable", "error", err)
-	} else {
-		result.Rulebooks, result.CachedRulebooks = books, cached
-	}
-	title := query
-	if len(books) > 0 && !search.Contains(books[0].Name, query) {
-		title = search.Title(books[0].Name)
-		result.SearchedAs = title
-	}
-
-	var bggFailed, rulesFailed bool
+	var books []domain.Rulebook
+	var cached bool
+	var booksErr error
+	var found gameSearch
 	var group sync.WaitGroup
 	group.Add(2)
 	go func() {
 		defer group.Done()
-		found, err := a.bgg.Search(ctx, title)
-		if err != nil {
-			bggFailed = true
-			slog.Warn("discovery BGG search unavailable", "error", err)
-			return
-		}
-		if found.Status == "processing" {
-			result.Status = "processing"
-			result.RetryAfterSeconds = found.RetryAfterSeconds
-			return
-		}
-		result.Games = search.Sort(title, found.Games, gameName)
+		books, cached, booksErr = a.findRulebooks(ctx, query, "en")
 	}()
 	go func() {
 		defer group.Done()
-		rules, err := a.store.SearchPublicRules(title, 0)
-		if err != nil {
-			rulesFailed = true
-			slog.Warn("discovery community search unavailable", "error", err)
-			return
-		}
-		result.CommunityRules = rules
+		found = a.searchGamesAndSheets(ctx, query)
 	}()
 	group.Wait()
-	if bggFailed {
+	booksFailed := booksErr != nil || (cached && len(books) == 0)
+	if booksErr != nil {
+		slog.Warn("discovery saved rulebooks unavailable", "error", booksErr)
+	} else {
+		result.Rulebooks, result.CachedRulebooks = books, cached
+	}
+	// rule-book.org tolerates typos. Only when the literal query finds nothing
+	// does its best rulebook name the game, so "coven" keeps finding Covenant
+	// instead of becoming "Disc Cover".
+	if found.empty() && len(books) > 0 && !search.Contains(books[0].Name, query) {
+		title := search.Title(books[0].Name)
+		if retry := a.searchGamesAndSheets(ctx, title); !retry.empty() {
+			found = retry
+			result.SearchedAs = title
+		}
+	}
+	result.Games, result.CommunityRules = found.games, found.rules
+	if found.processing {
+		result.Status, result.RetryAfterSeconds = "processing", found.retryAfterSeconds
+	}
+	if found.bggFailed {
 		result.UnavailableSources = append(result.UnavailableSources, "bgg")
 	}
-	if rulesFailed {
+	if found.rulesFailed {
 		result.UnavailableSources = append(result.UnavailableSources, "community")
 	}
 	if booksFailed {
@@ -107,6 +99,52 @@ func (a *API) searchDiscovery(c *gin.Context) {
 		status = http.StatusAccepted
 	}
 	writeJSON(c.Writer, status, result)
+}
+
+type gameSearch struct {
+	games                  []bgg.CollectionGame
+	rules                  []domain.ScoringRule
+	processing             bool
+	retryAfterSeconds      int
+	bggFailed, rulesFailed bool
+}
+
+// empty means BGG answered and neither source matched, so another term may help.
+func (g gameSearch) empty() bool {
+	return !g.bggFailed && !g.processing && len(g.games) == 0 && len(g.rules) == 0
+}
+
+// searchGamesAndSheets queries BGG and community sheets for one term in parallel.
+func (a *API) searchGamesAndSheets(ctx context.Context, term string) gameSearch {
+	result := gameSearch{games: []bgg.CollectionGame{}, rules: []domain.ScoringRule{}}
+	var group sync.WaitGroup
+	group.Add(2)
+	go func() {
+		defer group.Done()
+		found, err := a.bgg.Search(ctx, term)
+		if err != nil {
+			result.bggFailed = true
+			slog.Warn("discovery BGG search unavailable", "error", err)
+			return
+		}
+		if found.Status == "processing" {
+			result.processing, result.retryAfterSeconds = true, found.RetryAfterSeconds
+			return
+		}
+		result.games = search.Sort(term, found.Games, gameName)
+	}()
+	go func() {
+		defer group.Done()
+		rules, err := a.store.SearchPublicRules(term, 0)
+		if err != nil {
+			result.rulesFailed = true
+			slog.Warn("discovery community search unavailable", "error", err)
+			return
+		}
+		result.rules = rules
+	}()
+	group.Wait()
+	return result
 }
 
 func gameName(game bgg.CollectionGame) string { return game.Name }

@@ -28,6 +28,7 @@ func (a *API) Handler() http.Handler {
 	v1.GET("/discovery/search", rateLimit(15, time.Minute, time.Now), a.searchDiscovery)
 	v1.POST("/rulebooks/:id/extract", rateLimit(3, time.Minute, time.Now), a.extractRulebook)
 	v1.GET("/games/:bggId", rateLimit(30, time.Minute, time.Now), a.getGame)
+	v1.POST("/games/:bggId/ask", rateLimit(10, time.Minute, time.Now), a.askRule)
 	auth := v1.Group("/auth")
 	limited := rateLimit(20, time.Minute, time.Now)
 	auth.POST("/signup", limited, gin.WrapF(a.signUp))

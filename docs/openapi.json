@@ -1670,6 +1670,23 @@
         }
       }
     },
+    "/v1/games/{bggId}/ask": {
+      "post": {
+        "operationId": "post_v1_games_bggId_ask",
+        "tags": ["Juegos"],
+        "summary": "Responder una pregunta de reglas con el reglamento del juego",
+        "description": "La IA lee el reglamento vinculado al juego (texto guardado por página; si todavía no se leyó, se descarga y se guarda una vez) y responde en español citando páginas. Las páginas citadas se validan: si no hay citas reales, found=false. citations trae el texto original de cada página citada para verificar la respuesta. Las respuestas se reutilizan por reglamento y pregunta.",
+        "parameters": [{"name": "bggId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}}],
+        "requestBody": {"required": true, "content": {"application/json": {"schema": {"type": "object", "required": ["question"], "properties": {"question": {"type": "string", "minLength": 3, "maxLength": 300}}}}}},
+        "responses": {
+          "200": {"description": "Respuesta", "content": {"application/json": {"schema": {"type": "object", "required": ["found", "answer", "citations", "rulebook"], "properties": {"found": {"type": "boolean"}, "answer": {"type": "string"}, "citations": {"type": "array", "items": {"type": "object", "required": ["page", "text"], "properties": {"page": {"type": "integer"}, "text": {"type": "string"}}}}, "rulebook": {"$ref": "#/components/schemas/Rulebook"}}}}}},
+          "404": {"description": "El juego no tiene reglamento vinculado"},
+          "429": {"description": "El proveedor de IA limitó pedidos"},
+          "503": {"description": "IA no disponible"},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
     "/v1/discovery/search": {
       "get": {
         "operationId": "get_v1_discovery_search",

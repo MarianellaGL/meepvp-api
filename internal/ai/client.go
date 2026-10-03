@@ -239,3 +239,8 @@ func (c *Client) SuggestQuery(ctx context.Context, query string) string {
 	}
 	return ""
 }
+
+// New builds a Responses API client; tests use it with a fake transport.
+func New(key, model, endpoint string, httpClient *http.Client) *Client {
+	return &Client{key: key, model: model, endpoint: endpoint, http: httpClient}
+}

@@ -1653,6 +1653,23 @@
         "description": "Máximo 20 MB y 100 páginas. Incluye OCR cuando está disponible. Revisar scoringSuggestion antes de guardar."
       }
     },
+    "/v1/games/{bggId}": {
+      "get": {
+        "operationId": "get_v1_games_bggId",
+        "tags": ["Juegos"],
+        "summary": "Juego con sus reglamentos y planillas",
+        "description": "Un juego se identifica por su ID de BGG. Devuelve los reglamentos vinculados (textReady indica si su texto ya está guardado) y las planillas públicas del juego más las propias. Si todavía no hay reglamento vinculado, name vincula los del catálogo cuyo título es exactamente ese nombre.",
+        "parameters": [
+          {"name": "bggId", "in": "path", "required": true, "schema": {"type": "integer", "minimum": 1}},
+          {"name": "name", "in": "query", "required": false, "schema": {"type": "string", "maxLength": 100}}
+        ],
+        "security": [{}, {"LegacyBearer": []}, {"JWTBearer": []}, {"AccessCookie": []}],
+        "responses": {
+          "200": {"description": "Juego", "content": {"application/json": {"schema": {"type": "object", "required": ["bggId", "rulebooks", "scoringRules"], "properties": {"bggId": {"type": "integer"}, "rulebooks": {"type": "array", "items": {"allOf": [{"$ref": "#/components/schemas/Rulebook"}, {"type": "object", "properties": {"textReady": {"type": "boolean"}}}]}}, "scoringRules": {"type": "array", "items": {"$ref": "#/components/schemas/ScoringRule"}}}}}}},
+          "default": {"description": "Error", "content": {"application/json": {"schema": {"$ref": "#/components/schemas/Error"}}}}
+        }
+      }
+    },
     "/v1/discovery/search": {
       "get": {
         "operationId": "get_v1_discovery_search",
@@ -3773,6 +3790,7 @@
           "edition": {
             "type": "string"
           },
+          "bggId": {"type": "integer", "description": "Juego de BGG vinculado"},
           "pdfUrl": {
             "type": "string"
           },

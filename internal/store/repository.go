@@ -7,6 +7,11 @@ type Repository interface {
 	SaveRulebooks(books []domain.Rulebook) error
 	FindRulebooks(query, language string) ([]domain.Rulebook, error)
 	GetRulebook(id string) (domain.Rulebook, error)
+	LinkRulebook(id string, bggID int) error
+	GameRulebooks(bggID int) ([]domain.Rulebook, error)
+	// SaveRulebookPages replaces the stored text; RulebookPages returns it in page order.
+	SaveRulebookPages(id string, pages []string) error
+	RulebookPages(id string) ([]string, error)
 	CreateUser(username, passwordHash string) (domain.User, error)
 	FindUser(username string) (domain.User, string, error)
 	SaveAuthSession(userID, tokenHash string, expiresAt int64) error

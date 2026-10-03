@@ -96,3 +96,17 @@ func encodeTestPDF(objects []string) []byte {
 	fmt.Fprintf(&output, "trailer\n<< /Size %d /Root 1 0 R >>\nstartxref\n%d\n%%%%EOF\n", len(offsets), xref)
 	return output.Bytes()
 }
+
+func TestExtractKeepsPageTextsAndFromPagesRebuildsResult(t *testing.T) {
+	result, err := Extract(testPDF("Victory points decide the winner"), "rules.pdf")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.PageTexts) != result.Pages || !strings.Contains(result.PageTexts[0], "Victory points") {
+		t.Fatalf("page texts not kept: %#v", result.PageTexts)
+	}
+	rebuilt := FromPages("rules.pdf", result.PageTexts)
+	if rebuilt.Pages != result.Pages || rebuilt.Text != result.Text || len(rebuilt.Excerpts) != len(result.Excerpts) {
+		t.Fatalf("stored pages do not rebuild the extraction: %#v vs %#v", rebuilt, result)
+	}
+}

@@ -40,13 +40,15 @@ type ScoringRule struct {
 
 // Rulebook stores catalog metadata; PDFs remain at their source URL.
 type Rulebook struct {
-	ID        string    `json:"id" gorm:"primaryKey"`
-	Source    string    `json:"source"`
-	SourceID  string    `json:"sourceId"`
-	Name      string    `json:"name"`
-	Language  string    `json:"language"`
-	Edition   string    `json:"edition,omitempty"`
-	PDFURL    string    `json:"pdfUrl"`
+	ID       string `json:"id" gorm:"primaryKey"`
+	Source   string `json:"source"`
+	SourceID string `json:"sourceId"`
+	Name     string `json:"name"`
+	Language string `json:"language"`
+	Edition  string `json:"edition,omitempty"`
+	PDFURL   string `json:"pdfUrl"`
+	// BGGID links the rulebook to its game once matched; nil until then.
+	BGGID     *int      `json:"bggId,omitempty" gorm:"column:bgg_id"`
 	CreatedAt time.Time `json:"createdAt"`
 	UpdatedAt time.Time `json:"updatedAt"`
 }

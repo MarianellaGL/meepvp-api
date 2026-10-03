@@ -113,5 +113,5 @@ func extractWithPoppler(data []byte, fileName string) (Result, error) {
 	if text == "" {
 		return Result{}, fmt.Errorf("could not find readable text in this PDF")
 	}
-	return Result{FileName: fileName, Pages: pages, Text: text, Excerpts: scoringExcerpts(text)}, nil
+	return Result{FileName: fileName, Pages: pages, Text: text, Excerpts: scoringExcerpts(text), PageTexts: texts}, nil
 }

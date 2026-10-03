@@ -98,5 +98,9 @@ func extractWithPDFKit(data []byte, fileName string) (Result, error) {
 		}
 	}
 	plainText := strings.TrimSpace(text.String())
-	return Result{FileName: fileName, Pages: extracted.Pages, Text: plainText, Excerpts: scoringExcerpts(plainText)}, nil
+	pageTexts := make([]string, len(extracted.Texts))
+	for i, pageText := range extracted.Texts {
+		pageTexts[i] = strings.TrimSpace(pageText)
+	}
+	return Result{FileName: fileName, Pages: extracted.Pages, Text: plainText, Excerpts: scoringExcerpts(plainText), PageTexts: pageTexts}, nil
 }

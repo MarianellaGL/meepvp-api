@@ -38,9 +38,12 @@ type playerTotal struct {
 
 type sessionResponse struct {
 	domain.ScoreSession
-	DurationSeconds int64         `json:"durationSeconds"`
-	Totals          []playerTotal `json:"totals"`
-	Winners         []playerTotal `json:"winners"`
+	// Rule is the sheet the game is scored with. Players see it with the game
+	// even when it is someone else's private sheet.
+	Rule            domain.ScoringRule `json:"rule"`
+	DurationSeconds int64              `json:"durationSeconds"`
+	Totals          []playerTotal      `json:"totals"`
+	Winners         []playerTotal      `json:"winners"`
 }
 
 func New(s store.Repository, clients ...*bgg.Client) *API {
@@ -724,5 +727,5 @@ func (a *API) sessionResult(session domain.ScoreSession) (sessionResponse, error
 			}
 		}
 	}
-	return sessionResponse{ScoreSession: session, DurationSeconds: session.DurationSeconds(time.Now().UTC()), Totals: totals, Winners: winners}, nil
+	return sessionResponse{ScoreSession: session, Rule: rule, DurationSeconds: session.DurationSeconds(time.Now().UTC()), Totals: totals, Winners: winners}, nil
 }

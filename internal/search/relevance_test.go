@@ -45,3 +45,13 @@ func TestTitleAndContains(t *testing.T) {
 	require.True(t, Contains("Schotten Totten Rulebook", "schotten"))
 	require.False(t, Contains("Schotten Totten Rulebook", "shoten toten"))
 }
+
+func TestNormalizeIsSafeAcrossGoroutines(t *testing.T) {
+	done := make(chan string, 16)
+	for range 16 {
+		go func() { done <- Normalize("Catán Rulebook") }()
+	}
+	for range 16 {
+		require.Equal(t, "catan", <-done)
+	}
+}

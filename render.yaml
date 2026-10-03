@@ -26,7 +26,8 @@ services:
         sync: false
       - key: SERVER_BASE_URL
         sync: false
-      - key: OPENAI_API_KEY
+      # AI uses the owner's ChatGPT sign-in through Codex CLI, never API credits:
+      # add ~/.codex/auth.json as the Secret File "codex-auth.json".
+      # Optional: a lighter Codex model to stretch the plan's usage.
+      - key: AI_CODEX_MODEL
         sync: false
-      - key: OPENAI_MODEL
-        value: gpt-4o-mini

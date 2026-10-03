@@ -80,6 +80,7 @@ func TestDiscoveryCombinesSourcesAndKeepsPartialResults(t *testing.T) {
 
 func TestDiscoveryCorrectsTyposFromRulebooksWithoutAI(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("AI_PROVIDER", "")
 	repo := store.NewMemoryStore()
 	_, err := repo.CreateRule(domain.ScoringRule{GameName: "Schotten Totten", Name: "Mojones", IsPublic: true, Fields: []domain.ScoreField{{Name: "Mojones", Kind: domain.FieldKindCounter, PointsPerUnit: 1}}})
 	require.NoError(t, err)

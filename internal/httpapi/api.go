@@ -74,7 +74,7 @@ func (a *API) extractPDF(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	a.addAISuggestion(r, &result, r.FormValue("gameName"))
+	// The AI draft is only requested when the person asks (/v1/ai/scoring-suggestion).
 	writeJSON(w, http.StatusOK, result)
 }
 

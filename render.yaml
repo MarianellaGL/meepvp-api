@@ -30,7 +30,3 @@ services:
         sync: false
       - key: OPENAI_MODEL
         value: gpt-4o-mini
-      - key: AI_PROVIDER
-        value: codex-worker
-      - key: CODEX_API_KEY
-        sync: false

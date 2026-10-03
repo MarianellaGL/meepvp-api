@@ -78,7 +78,7 @@ func (a *API) extractRulebook(c *gin.Context) {
 		writeRulebookError(c.Writer, err)
 		return
 	}
-	a.addAISuggestion(c.Request, &result, book.Name)
+	// The AI draft is only requested when the person asks (/v1/ai/scoring-suggestion).
 	writeJSON(c.Writer, http.StatusOK, struct {
 		pdfreader.Result
 		Rulebook domain.Rulebook `json:"rulebook"`

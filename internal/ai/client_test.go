@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"tablescore-api/internal/pdfreader"
 	"time"
 )
 
@@ -188,5 +190,31 @@ func TestResponsesRateLimitKeepsProviderCodeAndDelay(t *testing.T) {
 func TestCodexFailureCategoryDoesNotExposeStderr(t *testing.T) {
 	if got := cliFailureCategory("Error 429: quota exceeded for sk-secret-value"); got != "quota_or_rate_limit" {
 		t.Fatalf("unexpected category: %q", got)
+	}
+}
+
+func TestTidySuggestionFixesFormInsteadOfDiscardingTheProposal(t *testing.T) {
+	notes := []string{}
+	for range 10 {
+		notes = append(notes, strings.Repeat("Revisá la puntuación de cada era. ", 20))
+	}
+	suggestion := pdfreader.ScoringSuggestion{GameName: "Brass: Birmingham", Notes: notes, Fields: []pdfreader.SuggestedField{
+		{Name: "Enlaces (era de canales)", Kind: "manual", PointsPerUnit: 1},
+		{Name: "Industrias (era de canales)", Kind: "counter", PointsPerUnit: 0},
+		{Name: "enlaces (era de canales)", Kind: "manual", PointsPerUnit: 0},
+		{Name: "  ", Kind: "manual", PointsPerUnit: 0},
+	}}
+	if !tidySuggestion(&suggestion) {
+		t.Fatal("a proposal with fixable form problems must be kept")
+	}
+	if len(suggestion.Fields) != 2 || suggestion.Fields[0].PointsPerUnit != 0 || suggestion.Fields[1].Kind != "manual" {
+		t.Fatalf("fields not tidied: %#v", suggestion.Fields)
+	}
+	if len(suggestion.Notes) != maxSuggestedNotes || len([]rune(suggestion.Notes[0])) > maxNoteRunes {
+		t.Fatalf("notes not bounded: %d notes, first %d runes", len(suggestion.Notes), len([]rune(suggestion.Notes[0])))
+	}
+	implausible := pdfreader.ScoringSuggestion{Fields: []pdfreader.SuggestedField{{Name: "Puntos", Kind: "counter", PointsPerUnit: 5000}}}
+	if tidySuggestion(&implausible) {
+		t.Fatal("implausible points must still reject the proposal")
 	}
 }

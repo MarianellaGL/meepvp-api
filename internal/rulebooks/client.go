@@ -19,6 +19,7 @@ import (
 )
 
 var ErrUnavailable = errors.New("rulebook catalog unavailable")
+var errRulebookTooLarge = fmt.Errorf("rulebook exceeds %d MB", pdfreader.MaxRulebookBytes>>20)
 var slug = regexp.MustCompile(`^[a-z0-9][a-z0-9-]{0,159}$`)
 
 type cachedSearch struct {
@@ -36,7 +37,7 @@ func New() *Client { return NewWithTransport(http.DefaultTransport) }
 // NewWithTransport permits fixture transports in tests without allowing clients
 // to supply a download host. Every URL and redirect still uses the same policy.
 func NewWithTransport(transport http.RoundTripper) *Client {
-	return &Client{http: &http.Client{Transport: transport, Timeout: 30 * time.Second, CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	return &Client{http: &http.Client{Transport: transport, Timeout: 3 * time.Minute, CheckRedirect: func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 5 || !AllowedPDFURL(req.URL.String()) {
 			return errors.New("PDF redirect not allowed")
 		}
@@ -123,15 +124,15 @@ func (c *Client) Download(ctx context.Context, book domain.Rulebook) ([]byte, er
 	if resp.StatusCode != http.StatusOK {
 		return nil, fmt.Errorf("rulebook source returned status %d", resp.StatusCode)
 	}
-	if resp.ContentLength > pdfreader.MaxFileBytes {
-		return nil, errors.New("rulebook exceeds 20 MB")
+	if resp.ContentLength > pdfreader.MaxRulebookBytes {
+		return nil, errRulebookTooLarge
 	}
-	data, err := io.ReadAll(io.LimitReader(resp.Body, pdfreader.MaxFileBytes+1))
+	data, err := io.ReadAll(io.LimitReader(resp.Body, pdfreader.MaxRulebookBytes+1))
 	if err != nil {
 		return nil, err
 	}
-	if len(data) > pdfreader.MaxFileBytes {
-		return nil, errors.New("rulebook exceeds 20 MB")
+	if len(data) > pdfreader.MaxRulebookBytes {
+		return nil, errRulebookTooLarge
 	}
 	return data, nil
 }

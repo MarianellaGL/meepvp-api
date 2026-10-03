@@ -77,3 +77,68 @@ func TestDiscoveryCombinesSourcesAndKeepsPartialResults(t *testing.T) {
 	require.Equal(t, 8, processing.RetryAfterSeconds)
 	require.Len(t, processing.CommunityRules, 1)
 }
+
+func TestDiscoveryCorrectsTyposFromRulebooksWithoutAI(t *testing.T) {
+	t.Setenv("OPENAI_API_KEY", "")
+	t.Setenv("AI_PROVIDER", "")
+	repo := store.NewMemoryStore()
+	_, err := repo.CreateRule(domain.ScoringRule{GameName: "Schotten Totten", Name: "Mojones", IsPublic: true, Fields: []domain.ScoreField{{Name: "Mojones", Kind: domain.FieldKindCounter, PointsPerUnit: 1}}})
+	require.NoError(t, err)
+	bggQueries := []string{}
+	gameTransport := rulebookTransport(func(r *http.Request) (*http.Response, error) {
+		body := `<items/>`
+		if r.URL.Path != "/search" {
+			return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+		}
+		bggQueries = append(bggQueries, r.URL.Query().Get("query"))
+		if r.URL.Query().Get("query") == "Schotten Totten" {
+			body = `<items><item type="boardgame" id="2"><name type="primary" value="Schotten Totten 2"/></item><item type="boardgame" id="1"><name type="primary" value="Schotten Totten"/></item></items>`
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	// rule-book.org's real answer to "shoten toten": the game plus fuzzy noise.
+	bookTransport := rulebookTransport(func(r *http.Request) (*http.Response, error) {
+		body := `{"results":[]}`
+		if r.URL.Query().Get("search") == "shoten toten" {
+			body = `{"results":[
+{"id":"ghost","name":"Ghost Stories: White Moon - Scénario Green Roots Plateau","language":"en","link":"https://cdn.1j1ju.com/medias/a.pdf"},
+{"id":"schotten","name":"Schotten Totten Rulebook","language":"en","link":"https://cdn.1j1ju.com/medias/b.pdf"},
+{"id":"schotten-2","name":"Schotten Totten 2 Rulebook","language":"en","link":"https://cdn.1j1ju.com/medias/c.pdf"},
+{"id":"harry","name":"Harry Potter: Hogwarts Battle Rulebook","language":"en","link":"https://cdn.1j1ju.com/medias/d.pdf"}]}`
+		}
+		return &http.Response{StatusCode: 200, Body: io.NopCloser(strings.NewReader(body)), Header: make(http.Header)}, nil
+	})
+	h := httpapi.New(repo, bgg.New("https://bgg.example", "", &http.Client{Transport: gameTransport})).WithRulebookClient(rulebooks.NewWithTransport(bookTransport)).Handler()
+
+	w := request(t, h, "GET", "/v1/discovery/search?query=shoten%20toten", nil, "")
+	require.Equal(t, 200, w.Code, w.Body.String())
+	var result struct {
+		Games []struct {
+			BGGID int `json:"bggId"`
+		} `json:"games"`
+		CommunityRules []domain.ScoringRule `json:"communityRules"`
+		Rulebooks      []domain.Rulebook    `json:"rulebooks"`
+		SearchedAs     string               `json:"searchedAs"`
+		SuggestedQuery string               `json:"suggestedQuery"`
+	}
+	decode(t, w, &result)
+	require.Equal(t, "Schotten Totten", result.SearchedAs)
+	require.Equal(t, []string{"Schotten Totten"}, bggQueries)
+	require.Len(t, result.Games, 2)
+	require.Equal(t, 1, result.Games[0].BGGID, "exact title first")
+	require.Len(t, result.CommunityRules, 1)
+	require.Len(t, result.Rulebooks, 2)
+	require.Equal(t, "Schotten Totten Rulebook", result.Rulebooks[0].Name)
+	noise, err := repo.FindRulebooks("Harry", "en")
+	require.NoError(t, err)
+	require.Empty(t, noise, "fuzzy noise must not enter the catalog")
+
+	bggQueries = nil
+	w = request(t, h, "GET", "/v1/discovery/search?query=zzqx", nil, "")
+	require.Equal(t, 200, w.Code, w.Body.String())
+	result.SearchedAs, result.SuggestedQuery = "", ""
+	decode(t, w, &result)
+	require.Empty(t, result.SearchedAs)
+	require.Empty(t, result.SuggestedQuery)
+	require.Equal(t, []string{"zzqx"}, bggQueries, "nothing is searched again on the model's behalf")
+}

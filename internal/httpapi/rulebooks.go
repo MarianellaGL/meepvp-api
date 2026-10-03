@@ -1,6 +1,7 @@
 package httpapi
 
 import (
+	"context"
 	"log/slog"
 	"net/http"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"tablescore-api/internal/domain"
 	"tablescore-api/internal/pdfreader"
 	"tablescore-api/internal/rulebooks"
+	"tablescore-api/internal/search"
 )
 
 type rulebookSearchResponse struct {
@@ -25,18 +27,14 @@ func (a *API) searchRulebooks(c *gin.Context) {
 		writeError(c.Writer, http.StatusBadRequest, "invalid rulebook search")
 		return
 	}
-	cached := false
-	if query != "" {
-		books, err := a.rulebooks.Search(c.Request.Context(), query, language)
-		if err != nil {
-			cached = true
-		} else if err = a.store.SaveRulebooks(books); err != nil {
-			slog.Error("could not save rulebook catalog", "error", err)
-			writeError(c.Writer, http.StatusInternalServerError, "could not save rulebook catalog")
-			return
-		}
+	var books []domain.Rulebook
+	var cached bool
+	var err error
+	if query == "" {
+		books, err = a.store.FindRulebooks("", language)
+	} else {
+		books, cached, err = a.findRulebooks(c.Request.Context(), query, language)
 	}
-	books, err := a.store.FindRulebooks(query, language)
 	if err != nil {
 		writeError(c.Writer, http.StatusInternalServerError, "could not read rulebook catalog")
 		return
@@ -47,6 +45,26 @@ func (a *API) searchRulebooks(c *gin.Context) {
 	}
 	writeJSON(c.Writer, http.StatusOK, rulebookSearchResponse{Results: books, Cached: cached})
 }
+
+// findRulebooks keeps rule-book.org's typo-tolerant hits that resemble the
+// query, best first, and saves only those so the catalog does not collect
+// noise. When the source is unavailable it ranks the saved catalog instead.
+func (a *API) findRulebooks(ctx context.Context, query, language string) ([]domain.Rulebook, bool, error) {
+	if remote, err := a.rulebooks.Search(ctx, query, language); err == nil {
+		books := search.Rank(query, remote, rulebookName)
+		if err := a.store.SaveRulebooks(books); err != nil {
+			slog.Warn("could not save rulebook catalog", "error", err)
+		}
+		return books, false, nil
+	}
+	saved, err := a.store.FindRulebooks(query, language)
+	if err != nil {
+		return nil, true, err
+	}
+	return search.Rank(query, saved, rulebookName), true, nil
+}
+
+func rulebookName(book domain.Rulebook) string { return book.Name }
 
 func (a *API) extractRulebook(c *gin.Context) {
 	book, err := a.store.GetRulebook(c.Param("id"))

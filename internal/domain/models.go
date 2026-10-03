@@ -34,6 +34,8 @@ type ScoringRule struct {
 	Fields       []ScoreField `json:"fields"`
 	IsPublic     bool         `json:"isPublic"`
 	CreatedAt    time.Time    `json:"createdAt"`
+	// OwnerID lives in its own column so the JSON payload never exposes it.
+	OwnerID string `json:"-"`
 }
 
 // Rulebook stores catalog metadata; PDFs remain at their source URL.
@@ -76,14 +78,6 @@ type ScoreSession struct {
 	CreatedAt           time.Time                 `json:"createdAt"`
 	LastModified        time.Time                 `json:"lastModified"`
 	FinishedAt          *time.Time                `json:"finishedAt,omitempty"`
-}
-
-type PDFImport struct {
-	ID        string    `json:"id"`
-	RuleID    string    `json:"ruleId"`
-	Status    string    `json:"status"`
-	FileName  string    `json:"fileName"`
-	CreatedAt time.Time `json:"createdAt"`
 }
 
 type ScheduledGame struct {

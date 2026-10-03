@@ -272,8 +272,15 @@ func (a *API) currentTableSession(w http.ResponseWriter, r *http.Request) {
 	a.writeSession(w, http.StatusOK, session)
 }
 
-func (a *API) listRules(w http.ResponseWriter) {
-	rules, err := a.store.ListRules()
+// listRules returns public sheets plus the caller's own; private sheets of
+// other people never leave the server.
+func (a *API) listRules(w http.ResponseWriter, r *http.Request) {
+	user, _, err := a.optionalUser(r)
+	if err != nil {
+		writeError(w, http.StatusUnauthorized, "invalid session")
+		return
+	}
+	rules, err := a.store.ListRules(user.ID)
 	if err != nil {
 		writeStoreError(w, err)
 		return
@@ -315,11 +322,12 @@ func (a *API) createRule(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 	}
-	if input.IsPublic {
-		if _, ok := a.requireUser(w, r); !ok {
-			return
-		}
+	user, authenticated, err := a.optionalUser(r)
+	if err != nil || (input.IsPublic && !authenticated) {
+		writeError(w, http.StatusUnauthorized, "login required")
+		return
 	}
+	input.OwnerID = user.ID
 	rule, err := a.store.CreateRule(input)
 	if err != nil {
 		writeStoreError(w, err)
@@ -639,14 +647,6 @@ func (a *API) getBoardPhoto(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	w.WriteHeader(http.StatusOK)
 	_, _ = w.Write(data)
-}
-
-func (a *API) createPDFImport(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusGone, "legacy PDF import is unavailable; use /v1/pdf/extract")
-}
-
-func (a *API) getPDFImport(w http.ResponseWriter, r *http.Request) {
-	writeError(w, http.StatusGone, "legacy PDF import is unavailable; use /v1/pdf/extract")
 }
 
 func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {

@@ -431,16 +431,6 @@ func TestBGGRateLimitIsExposedToClient(t *testing.T) {
 	}
 }
 
-func TestLegacyPDFImportDoesNotQueueUnprocessableJobs(t *testing.T) {
-	h := httpapi.New(store.NewMemoryStore()).Handler()
-	if response := request(t, h, http.MethodPost, "/v1/scoring-rules/example/pdf-imports", nil, ""); response.Code != http.StatusGone {
-		t.Fatalf("legacy PDF upload still accepts jobs: %d", response.Code)
-	}
-	if response := request(t, h, http.MethodGet, "/v1/pdf-imports/example", nil, ""); response.Code != http.StatusGone {
-		t.Fatalf("legacy PDF status still appears pending: %d", response.Code)
-	}
-}
-
 func TestCommunityScoringRulesOnlyShowSharedTemplates(t *testing.T) {
 	h := httpapi.New(store.NewMemoryStore()).Handler()
 	signup := request(t, h, http.MethodPost, "/v1/auth/signup", map[string]string{"username": "ana", "password": "correct horse battery staple"}, "")
@@ -462,13 +452,43 @@ func TestCommunityScoringRulesOnlyShowSharedTemplates(t *testing.T) {
 			t.Fatalf("create rule: %d: %s", response.Code, response.Body.String())
 		}
 	}
-	all := request(t, h, http.MethodGet, "/v1/scoring-rules", nil, "")
-	var allRules []struct {
-		ID string `json:"id"`
+	countRules := func(path, token string) int {
+		t.Helper()
+		response := request(t, h, http.MethodGet, path, nil, "")
+		if token != "" {
+			response = requestAuth(t, h, http.MethodGet, path, nil, token)
+		}
+		if response.Code != http.StatusOK {
+			t.Fatalf("list %s: %d: %s", path, response.Code, response.Body.String())
+		}
+		var rules []struct {
+			ID string `json:"id"`
+		}
+		decode(t, response, &rules)
+		return len(rules)
 	}
-	decode(t, all, &allRules)
-	if all.Code != http.StatusOK || len(allRules) != 3 {
-		t.Fatalf("database sheet list: %d, %d rules", all.Code, len(allRules))
+	other := request(t, h, http.MethodPost, "/v1/auth/signup", map[string]string{"username": "beto", "password": "correct horse battery staple"}, "")
+	var otherAccount struct {
+		Token string `json:"token"`
+	}
+	decode(t, other, &otherAccount)
+	if n := countRules("/v1/scoring-rules", ""); n != 2 {
+		t.Fatalf("anonymous list must only show public sheets, got %d", n)
+	}
+	if n := countRules("/v1/scoring-rules", otherAccount.Token); n != 2 {
+		t.Fatalf("another account must not see private sheets, got %d", n)
+	}
+	if n := countRules("/v1/scoring-rules", account.Token); n != 3 {
+		t.Fatalf("owner must see public and own private sheets, got %d", n)
+	}
+	if n := countRules("/v1/me/scoring-rules", account.Token); n != 3 {
+		t.Fatalf("owner sheets: got %d", n)
+	}
+	if n := countRules("/v1/me/scoring-rules", otherAccount.Token); n != 0 {
+		t.Fatalf("other account owns no sheets, got %d", n)
+	}
+	if response := request(t, h, http.MethodGet, "/v1/me/scoring-rules", nil, ""); response.Code != http.StatusUnauthorized {
+		t.Fatalf("my sheets require login: %d", response.Code)
 	}
 	response := request(t, h, http.MethodGet, "/v1/community/scoring-rules?query=wing&bggId=266192", nil, "")
 	if response.Code != http.StatusOK {

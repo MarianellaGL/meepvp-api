@@ -195,7 +195,7 @@ func (s *MemoryStore) ActiveSessionByTable(code string) (domain.ScoreSession, er
 	defer s.mu.RUnlock()
 	var latest domain.ScoreSession
 	for _, session := range s.sessions {
-		if session.TableCode == strings.ToUpper(code) && (session.Status == "active" || session.Status == "paused") && (latest.ID == "" || session.CreatedAt.After(latest.CreatedAt)) {
+		if session.TableCode == strings.ToUpper(code) && (session.Status == domain.StatusWaiting || session.Status == "active" || session.Status == "paused") && (latest.ID == "" || session.CreatedAt.After(latest.CreatedAt)) {
 			latest = session
 		}
 	}

@@ -175,7 +175,7 @@ func (s *PostgresStore) GetSession(id string) (domain.ScoreSession, error) {
 
 func (s *PostgresStore) ActiveSessionByTable(code string) (domain.ScoreSession, error) {
 	var payload []byte
-	err := s.db.QueryRow(`SELECT data FROM score_sessions WHERE table_code = $1 AND data->>'status' IN ('active', 'paused') ORDER BY created_at DESC LIMIT 1`, strings.ToUpper(code)).Scan(&payload)
+	err := s.db.QueryRow(`SELECT data FROM score_sessions WHERE table_code = $1 AND data->>'status' IN ('waiting', 'active', 'paused') ORDER BY created_at DESC LIMIT 1`, strings.ToUpper(code)).Scan(&payload)
 	if errors.Is(err, sql.ErrNoRows) {
 		return domain.ScoreSession{}, ErrNotFound
 	}

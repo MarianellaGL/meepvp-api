@@ -35,12 +35,17 @@ func TestGameWaitsForListedPlayersAndHostCanStartEarly(t *testing.T) {
 
 	session := create(true)
 	require.Equal(t, "waiting", session.Status)
+	var current waitingSession
+	w := request(t, h, http.MethodGet, "/v1/tables/"+table.Code+"/current-session", nil, "")
+	require.Equal(t, http.StatusOK, w.Code, "players find a waiting game by its table code")
+	decode(t, w, &current)
+	require.Equal(t, session.ID, current.ID)
 	require.True(t, session.Players[0].Joined, "the host is already at the table")
 	require.False(t, session.Players[1].Joined)
 	score := map[string]any{"playerId": session.Players[0].ID, "fieldId": "x", "value": 3}
 	require.Equal(t, http.StatusBadRequest, request(t, h, http.MethodPatch, "/v1/sessions/"+session.ID+"/scores", score, "").Code, "no scoring while waiting")
 
-	w := request(t, h, http.MethodPost, "/v1/sessions/"+session.ID+"/players", map[string]string{"name": "lucía"}, "")
+	w = request(t, h, http.MethodPost, "/v1/sessions/"+session.ID+"/players", map[string]string{"name": "lucía"}, "")
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 	decode(t, w, &session)
 	require.Equal(t, "active", session.Status, "the game starts when the last listed player joins")

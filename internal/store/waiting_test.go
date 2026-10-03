@@ -26,6 +26,9 @@ func TestPostgresWaitingGameStartsWhenEveryoneJoins(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, stored.Players[1].Joined, "joining is saved")
 
+	current, err := repo.ActiveSessionByTable(table.Code)
+	require.NoError(t, err)
+	require.Equal(t, session.ID, current.ID, "a waiting game is found by its table code")
 	session, err = repo.AddPlayer(session.ID, "Tomás", "")
 	require.NoError(t, err)
 	require.Equal(t, "active", session.Status)

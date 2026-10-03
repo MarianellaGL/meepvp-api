@@ -16,12 +16,14 @@ import (
 )
 
 // Client only receives extracted text. Original PDFs and images never leave the OCR flow.
-// It calls the Responses API directly with OPENAI_MODEL (gpt-4o-mini by default).
 type Client struct {
-	key      string
-	model    string
-	endpoint string
-	http     *http.Client
+	key          string
+	model        string
+	endpoint     string
+	http         *http.Client
+	provider     string
+	cliPath      string
+	workerSocket string
 }
 
 func NewFromEnvironment() *Client {
@@ -29,11 +31,19 @@ func NewFromEnvironment() *Client {
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
-	return New(strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model, "https://api.openai.com/v1/responses", &http.Client{Timeout: 60 * time.Second})
+	provider := strings.TrimSpace(os.Getenv("AI_PROVIDER"))
+	if provider == "codex-cli" {
+		return &Client{provider: provider, cliPath: "codex"}
+	}
+	if provider == "codex-worker" {
+		return &Client{provider: provider, workerSocket: workerSocketPath()}
+	}
+	return &Client{key: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model: model,
+		endpoint: "https://api.openai.com/v1/responses", http: &http.Client{Timeout: 25 * time.Second}}
 }
 
 func (c *Client) Enabled() bool {
-	return c != nil && c.key != ""
+	return c != nil && (c.key != "" || c.provider == "codex-cli" || c.provider == "codex-worker")
 }
 
 type response struct {

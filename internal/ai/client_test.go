@@ -6,8 +6,11 @@ import (
 	"errors"
 	"io"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -63,6 +66,108 @@ func TestScoringEvidenceKeepsRulesFromMiddleOfLongRulebook(t *testing.T) {
 	}
 }
 
+func TestCodexCLIUsesStructuredOutputForScoring(t *testing.T) {
+	t.Setenv("DATABASE_URL", "do-not-pass-to-ai")
+	t.Setenv("OPENAI_API_KEY", "must-not-reach-codex")
+	t.Setenv("CODEX_API_KEY", "must-not-reach-codex")
+	t.Setenv("AI_CODEX_MODEL", "gpt-test-mini")
+	bin := filepath.Join(t.TempDir(), "fake-codex")
+	script := `#!/bin/sh
+[ -z "$DATABASE_URL" ] || exit 2
+[ -n "$CODEX_HOME" ] || exit 3
+[ -z "$CODEX_API_KEY" ] || exit 4
+[ -z "$OPENAI_API_KEY" ] || exit 5
+case " $* " in *" -m gpt-test-mini "*) ;; *) exit 6 ;; esac
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    printf '%s' '{"found":true,"gameName":"Juego","fields":[{"name":"Monedas","kind":"counter","pointsPerUnit":2}],"notes":[]}' > "$1"
+    exit 0
+  fi
+  shift
+done
+exit 1
+`
+	if err := os.WriteFile(bin, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	client := &Client{provider: "codex-cli", cliPath: bin}
+	suggestion, err := client.SuggestScoring(context.Background(), "Juego", "Cada moneda vale 2 puntos", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suggestion == nil || suggestion.Source != "ai" || suggestion.Fields[0].PointsPerUnit != 2 {
+		t.Fatalf("unexpected suggestion: %#v", suggestion)
+	}
+}
+
+func TestWorkerRoutesScoringOverUnixSocket(t *testing.T) {
+	dir := t.TempDir()
+	bin := filepath.Join(dir, "fake-codex")
+	script := `#!/bin/sh
+while [ "$#" -gt 0 ]; do
+  if [ "$1" = "--output-last-message" ]; then
+    shift
+    printf '%s' '{"found":true,"gameName":"Juego","fields":[{"name":"Monedas","kind":"counter","pointsPerUnit":2}],"notes":[]}' > "$1"
+    exit 0
+  fi
+  shift
+done
+exit 1
+`
+	if err := os.WriteFile(bin, []byte(script), 0700); err != nil {
+		t.Fatal(err)
+	}
+	socketDir, err := os.MkdirTemp("/tmp", "meeple-ai-test-")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = os.RemoveAll(socketDir) }()
+	socket := filepath.Join(socketDir, "worker.sock")
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	done := make(chan error, 1)
+	go func() { done <- ServeWorker(ctx, socket, bin) }()
+	deadline := time.Now().Add(2 * time.Second)
+	for {
+		if _, err := os.Stat(socket); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("worker did not open socket")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	client := &Client{provider: "codex-worker", workerSocket: socket}
+	suggestion, err := client.SuggestScoring(context.Background(), "Juego", "Cada moneda vale 2 puntos", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if suggestion == nil || suggestion.Fields[0].PointsPerUnit != 2 {
+		t.Fatalf("unexpected suggestion: %#v", suggestion)
+	}
+	cancel()
+	if err := <-done; err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestWorkerNeverFallsBackToPaidAPI(t *testing.T) {
+	calls := 0
+	client := &Client{provider: "codex-worker", workerSocket: filepath.Join(t.TempDir(), "missing.sock"),
+		key: "paid-key", model: "gpt-4o-mini", endpoint: "https://example.test/v1/responses",
+		http: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
+			calls++
+			return modelResponse(`{}`), nil
+		})}}
+	if _, err := client.SuggestScoring(context.Background(), "Juego", "Cada moneda vale 2 puntos de victoria.", nil); err == nil {
+		t.Fatal("an unavailable worker must report an error")
+	}
+	if calls != 0 {
+		t.Fatalf("worker failure reached the paid API %d times", calls)
+	}
+}
+
 func TestResponsesRateLimitKeepsProviderCodeAndDelay(t *testing.T) {
 	client := &Client{key: "test-key", endpoint: "https://example.test/v1/responses",
 		http: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
@@ -77,5 +182,11 @@ func TestResponsesRateLimitKeepsProviderCodeAndDelay(t *testing.T) {
 	providerErr.Code = "credit_balance_exhausted"
 	if !providerErr.QuotaExhausted() {
 		t.Fatal("prepaid credit exhaustion must not be treated as a retryable rate limit")
+	}
+}
+
+func TestCodexFailureCategoryDoesNotExposeStderr(t *testing.T) {
+	if got := cliFailureCategory("Error 429: quota exceeded for sk-secret-value"); got != "quota_or_rate_limit" {
+		t.Fatalf("unexpected category: %q", got)
 	}
 }

@@ -33,13 +33,20 @@ only commits whose CI checks pass.
 | `APP_ENV` | `production`, supplied by the Blueprint. |
 | `LOG_LEVEL` | `info`, supplied by the Blueprint. |
 | `BGG_API_TOKEN` | Optional: add the existing BoardGameGeek token to enable authenticated BGG requests. |
-| `OPENAI_API_KEY` | Server-side OpenAI project key with a monthly spend limit. Without it, AI features answer 503 and everything else works. |
-| `OPENAI_MODEL` | `gpt-4o-mini`, supplied by the Blueprint. |
+| Secret File `codex-auth.json` | Copy of the owner's `~/.codex/auth.json` (Codex signed in with ChatGPT). AI uses that plan's usage, never API credits. Without it, AI features answer 503. |
+| `AI_CODEX_MODEL` | Optional lighter Codex model to stretch the plan's usage; empty uses Codex's default. |
 
 Render supplies `PORT`; the server already listens on that port on all interfaces.
-AI calls go straight to the Responses API with `OPENAI_MODEL`. Earlier images
-ran Codex CLI; remove `CODEX_API_KEY` and `AI_PROVIDER` from an existing
-service's Environment, since the Blueprint no longer manages them.
+The Docker image installs Codex CLI at build time. At startup the entrypoint
+copies the `codex-auth.json` Secret File into a private Codex home and runs the
+CLI worker under a separate OS user behind a private Unix socket; the API
+process keeps its database configuration and cannot read the sign-in. There is
+no paid API fallback: if Codex fails or the plan's usage runs out, AI features
+answer 503 and everything else keeps working. Codex refreshes the sign-in inside
+the container, which Render does not persist; if AI fails with authentication
+errors after a deploy, run `codex login` locally and upload the new
+`~/.codex/auth.json`. Remove `CODEX_API_KEY`, `AI_PROVIDER` and
+`OPENAI_API_KEY` from an existing service's Environment.
 No local `.env` or `config.yaml` is included in the image. Production requires
 a strong JWT secret and an absolute base URL. SMTP is optional. Without an
 SMTP host, production disables email delivery and never logs email bodies or

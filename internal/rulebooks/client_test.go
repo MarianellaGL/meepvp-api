@@ -62,11 +62,11 @@ func TestDownloadRejectsUnsafeSourcesRedirectsAndOversizedPDFs(t *testing.T) {
 	require.Equal(t, 1, calls)
 	client = NewWithTransport(transportFunc(func(r *http.Request) (*http.Response, error) {
 		result := response("tiny")
-		result.ContentLength = pdfreader.MaxFileBytes + 1
+		result.ContentLength = pdfreader.MaxRulebookBytes + 1
 		return result, nil
 	}))
 	_, err = client.Download(context.Background(), domain.Rulebook{PDFURL: "https://cdn.1j1ju.com/medias/a.pdf"})
-	require.ErrorContains(t, err, "20 MB")
+	require.ErrorContains(t, err, "64 MB")
 }
 
 func TestSearchRejectsMalformedAndOversizedResponses(t *testing.T) {

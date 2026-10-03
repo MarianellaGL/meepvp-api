@@ -104,7 +104,7 @@ func (a *API) readRulebook(ctx context.Context, book domain.Rulebook) (pdfreader
 	if err != nil {
 		return pdfreader.Result{}, errRulebookDownload
 	}
-	result, err := pdfreader.Extract(data, book.SourceID+".pdf")
+	result, err := pdfreader.ExtractRulebook(data, book.SourceID+".pdf")
 	if err != nil {
 		return pdfreader.Result{}, errRulebookExtract
 	}

@@ -12,6 +12,10 @@ import (
 )
 
 const MaxFileBytes = 20 << 20
+
+// MaxRulebookBytes is larger because catalog rulebooks are full of artwork
+// (Codex Naturalis is 25 MB); only the allowlisted rulebook CDN supplies them.
+const MaxRulebookBytes = 64 << 20
 const maxPages = 100
 const maxTextRunes = 120000
 
@@ -32,7 +36,17 @@ func FromPages(fileName string, pages []string) Result {
 		Suggestion: suggestScoring(text), PageTexts: pages}
 }
 
-func Extract(data []byte, fileName string) (result Result, err error) {
+// Extract reads a PDF uploaded by a person, up to MaxFileBytes.
+func Extract(data []byte, fileName string) (Result, error) {
+	return extract(data, fileName, MaxFileBytes)
+}
+
+// ExtractRulebook reads a catalog rulebook, up to MaxRulebookBytes.
+func ExtractRulebook(data []byte, fileName string) (Result, error) {
+	return extract(data, fileName, MaxRulebookBytes)
+}
+
+func extract(data []byte, fileName string, maxBytes int) (result Result, err error) {
 	defer func() {
 		if recovered := recover(); recovered != nil {
 			result, err = Result{}, fmt.Errorf("could not read this PDF")
@@ -41,8 +55,8 @@ func Extract(data []byte, fileName string) (result Result, err error) {
 			result.Suggestion = suggestScoring(result.Text)
 		}
 	}()
-	if len(data) < 5 || len(data) > MaxFileBytes || !bytes.HasPrefix(data, []byte("%PDF-")) {
-		return Result{}, fmt.Errorf("file must be a PDF up to 20 MB")
+	if len(data) < 5 || len(data) > maxBytes || !bytes.HasPrefix(data, []byte("%PDF-")) {
+		return Result{}, fmt.Errorf("file must be a PDF up to %d MB", maxBytes>>20)
 	}
 	if _, lookupErr := exec.LookPath("pdftotext"); lookupErr == nil {
 		return extractWithPoppler(data, fileName)

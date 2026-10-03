@@ -9,6 +9,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"tablescore-api/internal/bgg"
 	"tablescore-api/internal/domain"
+	"tablescore-api/internal/search"
 )
 
 type discoveryResponse struct {
@@ -19,9 +20,16 @@ type discoveryResponse struct {
 	Rulebooks          []domain.Rulebook    `json:"rulebooks"`
 	CachedRulebooks    bool                 `json:"cachedRulebooks"`
 	UnavailableSources []string             `json:"unavailableSources"`
+	// SearchedAs is the catalog title used for games and sheets when the
+	// query was a misspelling of it.
+	SearchedAs string `json:"searchedAs,omitempty"`
+	// SuggestedQuery is an AI suggestion offered only when nothing matched.
+	// It is never searched automatically; the person decides.
+	SuggestedQuery string `json:"suggestedQuery,omitempty"`
 }
 
 // searchDiscovery keeps the three public catalogs behind one mobile request.
+// Search and ordering are deterministic; the model may only suggest a query.
 // Each source can fail independently so available results remain usable.
 func (a *API) searchDiscovery(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("query"))
@@ -29,65 +37,53 @@ func (a *API) searchDiscovery(c *gin.Context) {
 		writeError(c.Writer, http.StatusBadRequest, "search query must be 2 to 100 characters")
 		return
 	}
+	ctx := c.Request.Context()
 	result := discoveryResponse{
 		Status: "ready", Games: []bgg.CollectionGame{}, CommunityRules: []domain.ScoringRule{},
 		Rulebooks: []domain.Rulebook{}, UnavailableSources: []string{},
 	}
-	var bggFailed, rulesFailed, booksFailed bool
+	// rule-book.org tolerates typos, so its best hit names the game for the
+	// sources that only match literal text.
+	books, cached, err := a.findRulebooks(ctx, query, "en")
+	booksFailed := err != nil || (cached && len(books) == 0)
+	if err != nil {
+		slog.Warn("discovery saved rulebooks unavailable", "error", err)
+	} else {
+		result.Rulebooks, result.CachedRulebooks = books, cached
+	}
+	title := query
+	if len(books) > 0 && !search.Contains(books[0].Name, query) {
+		title = search.Title(books[0].Name)
+		result.SearchedAs = title
+	}
+
+	var bggFailed, rulesFailed bool
 	var group sync.WaitGroup
-	group.Add(3)
+	group.Add(2)
 	go func() {
 		defer group.Done()
-		found, err := a.bgg.Search(c.Request.Context(), query)
+		found, err := a.bgg.Search(ctx, title)
 		if err != nil {
 			bggFailed = true
 			slog.Warn("discovery BGG search unavailable", "error", err)
 			return
-		}
-		if found.Status == "ready" && len(found.Games) == 0 {
-			if alternate := a.ai.AlternateBGGQuery(c.Request.Context(), query); alternate != "" {
-				if retry, retryErr := a.bgg.Search(c.Request.Context(), alternate); retryErr == nil && retry.Status == "ready" && len(retry.Games) > 0 {
-					found = retry
-				}
-			}
 		}
 		if found.Status == "processing" {
 			result.Status = "processing"
 			result.RetryAfterSeconds = found.RetryAfterSeconds
 			return
 		}
-		if ranked := a.ai.RankGames(c.Request.Context(), query, found.Games); ranked != nil {
-			result.Games = ranked
-		}
+		result.Games = search.Sort(title, found.Games, gameName)
 	}()
 	go func() {
 		defer group.Done()
-		rules, err := a.store.SearchPublicRules(query, 0)
+		rules, err := a.store.SearchPublicRules(title, 0)
 		if err != nil {
 			rulesFailed = true
 			slog.Warn("discovery community search unavailable", "error", err)
 			return
 		}
 		result.CommunityRules = rules
-	}()
-	go func() {
-		defer group.Done()
-		books, err := a.rulebooks.Search(c.Request.Context(), query, "en")
-		if err != nil {
-			result.CachedRulebooks = true
-		} else if err = a.store.SaveRulebooks(books); err != nil {
-			result.CachedRulebooks = true
-			slog.Warn("discovery rulebook catalog could not be saved", "error", err)
-		}
-		books, err = a.store.FindRulebooks(query, "en")
-		if err != nil || (result.CachedRulebooks && len(books) == 0) {
-			booksFailed = true
-			if err != nil {
-				slog.Warn("discovery saved rulebooks unavailable", "error", err)
-			}
-			return
-		}
-		result.Rulebooks = books
 	}()
 	group.Wait()
 	if bggFailed {
@@ -103,9 +99,14 @@ func (a *API) searchDiscovery(c *gin.Context) {
 		writeError(c.Writer, http.StatusBadGateway, "game discovery unavailable")
 		return
 	}
+	if result.Status == "ready" && len(result.Games) == 0 && len(result.CommunityRules) == 0 && len(result.Rulebooks) == 0 {
+		result.SuggestedQuery = a.ai.SuggestQuery(ctx, query)
+	}
 	status := http.StatusOK
 	if result.Status == "processing" {
 		status = http.StatusAccepted
 	}
 	writeJSON(c.Writer, status, result)
 }
+
+func gameName(game bgg.CollectionGame) string { return game.Name }

@@ -18,6 +18,7 @@ import (
 	"tablescore-api/internal/domain"
 	"tablescore-api/internal/pdfreader"
 	"tablescore-api/internal/rulebooks"
+	"tablescore-api/internal/search"
 	"tablescore-api/internal/store"
 )
 
@@ -183,18 +184,11 @@ func (a *API) searchBGG(w http.ResponseWriter, r *http.Request) {
 		writeBGGError(w, err)
 		return
 	}
-	if result.Status == "ready" && len(result.Games) == 0 {
-		if alternative := a.ai.AlternateBGGQuery(r.Context(), query); alternative != "" {
-			if retry, retryErr := a.bgg.Search(r.Context(), alternative); retryErr == nil && retry.Status == "ready" && len(retry.Games) > 0 {
-				result = retry
-			}
-		}
-	}
 	status := http.StatusOK
 	if result.Status == "processing" {
 		status = http.StatusAccepted
 	} else {
-		result.Games = a.ai.RankGames(r.Context(), query, result.Games)
+		result.Games = search.Sort(query, result.Games, gameName)
 	}
 	writeJSON(w, status, result)
 }

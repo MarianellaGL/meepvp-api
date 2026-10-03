@@ -11,8 +11,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"tablescore-api/internal/bgg"
 )
 
 type roundTripFunc func(*http.Request) (*http.Response, error)
@@ -65,16 +63,6 @@ func TestScoringEvidenceKeepsRulesFromMiddleOfLongRulebook(t *testing.T) {
 	}
 	if len([]rune(evidence)) >= len([]rune(text)) {
 		t.Fatal("long rulebook was not bounded")
-	}
-}
-
-func TestRankGamesRejectsInventedIDs(t *testing.T) {
-	client := &Client{key: "test-key", model: "gpt-4o-mini", endpoint: "https://example.test/v1/responses",
-		http: &http.Client{Transport: roundTripFunc(func(*http.Request) (*http.Response, error) { return modelResponse(`{"ids":[2,999]}`), nil })}}
-	games := []bgg.CollectionGame{{BGGID: 1, Name: "Uno"}, {BGGID: 2, Name: "Dos"}}
-	ordered := client.RankGames(context.Background(), "Dos", games)
-	if ordered[0].BGGID != 1 {
-		t.Fatalf("invented ID changed BGG results: %#v", ordered)
 	}
 }
 

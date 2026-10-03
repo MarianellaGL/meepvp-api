@@ -16,14 +16,12 @@ import (
 )
 
 // Client only receives extracted text. Original PDFs and images never leave the OCR flow.
+// It calls the Responses API directly with OPENAI_MODEL (gpt-4o-mini by default).
 type Client struct {
-	key          string
-	model        string
-	endpoint     string
-	http         *http.Client
-	provider     string
-	cliPath      string
-	workerSocket string
+	key      string
+	model    string
+	endpoint string
+	http     *http.Client
 }
 
 func NewFromEnvironment() *Client {
@@ -31,21 +29,11 @@ func NewFromEnvironment() *Client {
 	if model == "" {
 		model = "gpt-4o-mini"
 	}
-	provider := strings.TrimSpace(os.Getenv("AI_PROVIDER"))
-	if provider == "codex-cli" {
-		return &Client{provider: provider, cliPath: "codex"}
-	}
-	if provider == "codex-worker" {
-		return &Client{provider: provider, workerSocket: workerSocketPath(),
-			key: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model: model,
-			endpoint: "https://api.openai.com/v1/responses", http: &http.Client{Timeout: 25 * time.Second}}
-	}
-	return &Client{key: strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model: model,
-		endpoint: "https://api.openai.com/v1/responses", http: &http.Client{Timeout: 25 * time.Second}}
+	return New(strings.TrimSpace(os.Getenv("OPENAI_API_KEY")), model, "https://api.openai.com/v1/responses", &http.Client{Timeout: 60 * time.Second})
 }
 
 func (c *Client) Enabled() bool {
-	return c != nil && (c.key != "" || c.provider == "codex-cli" || c.provider == "codex-worker")
+	return c != nil && c.key != ""
 }
 
 type response struct {
@@ -238,4 +226,9 @@ func (c *Client) SuggestQuery(ctx context.Context, query string) string {
 		}
 	}
 	return ""
+}
+
+// New builds a Responses API client; tests use it with a fake transport.
+func New(key, model, endpoint string, httpClient *http.Client) *Client {
+	return &Client{key: key, model: model, endpoint: endpoint, http: httpClient}
 }

@@ -78,13 +78,16 @@ func TestRulebookIsDownloadedAndReadOnce(t *testing.T) {
 		downloads++
 		return &http.Response{StatusCode: 200, Body: io.NopCloser(bytes.NewReader(pdf)), ContentLength: int64(len(pdf)), Header: make(http.Header)}, nil
 	}))
-	h := httpapi.New(repo).WithRulebookClient(client).Handler()
+	modelCalls := 0
+	model := fakeModel(&modelCalls, `{"found":false,"gameName":"","fields":[],"notes":[]}`)
+	h := httpapi.New(repo).WithRulebookClient(client).WithAIClient(model).Handler()
 	for range 2 {
 		w := request(t, h, "POST", "/v1/rulebooks/"+book.ID+"/extract", nil, "")
 		require.Equal(t, 200, w.Code, w.Body.String())
 		require.Contains(t, w.Body.String(), "most points wins")
 	}
 	require.Equal(t, 1, downloads)
+	require.Equal(t, 0, modelCalls, "reading a rulebook must not call the model")
 	pages, err := repo.RulebookPages(book.ID)
 	require.NoError(t, err)
 	require.Len(t, pages, 1)

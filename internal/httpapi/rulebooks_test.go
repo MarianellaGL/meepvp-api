@@ -62,7 +62,6 @@ func TestCatalogSearchPersistsMetadataWithoutChangingReviewedEdition(t *testing.
 }
 
 func TestScoringDraftEndpointReportsUnavailableAssistant(t *testing.T) {
-	t.Setenv("AI_PROVIDER", "")
 	t.Setenv("OPENAI_API_KEY", "")
 	h := httpapi.New(store.NewMemoryStore()).Handler()
 	input := map[string]any{"gameName": "Viticulture", "text": "Victory points are tracked during the game. The game ends according to the victory point track."}
